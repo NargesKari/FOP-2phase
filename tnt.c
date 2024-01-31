@@ -1,57 +1,39 @@
 #include <stdio.h>
-#include <stdlib.h>
+//#include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
-#include <stdbool.h>
+//#include <stdbool.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-
-#define MAX_FILENAME_LENGTH 1000
-#define MAX_COMMIT_MESSAGE_LENGTH 2000
-#define MAX_LINE_LENGTH 1000
-#define MAX_MESSAGE_LENGTH 1000
-
-#define debug(x) printf("%s", x);
-
-
-void print_command(int argc, char * const argv[]);
-
+//#include <sys/types.h>
+#include <pwd.h>
+//#define MAX_FILENAME_LENGTH 1000
+//#define MAX_COMMIT_MESSAGE_LENGTH 2000
+//#define MAX_LINE_LENGTH 1000
+//#define MAX_MESSAGE_LENGTH 1000
+//#define debug(x) printf("%s", x);
+char cwd[1024];
+char tnt_path[1024];
+//void print_command(int argc, char * const argv[]);
 int run_init(int argc, char * const argv[]);
-int create_configs(char *username, char *email);
-
-int run_add(int argc, char * const argv[]);
-int add_to_staging(char *filepath);
-
-int run_reset(int argc, char * const argv[]);
-int remove_from_staging(char *filepath);
-
-int run_commit(int argc, char * const argv[]);
-int inc_last_commit_ID();
-bool check_file_directory_exists(char *filepath);
-int commit_staged_file(int commit_ID, char *filepath);
-int track_file(char *filepath);
-bool is_tracked(char *filepath);
-int create_commit_file(int commit_ID, char *message);
-int find_file_last_commit(char* filepath);
-
-int run_checkout(int argc, char *const argv[]);
-int find_file_last_change_before_commit(char *filepath, int commit_ID);
-int checkout_file(char *filepath, int commit_ID);
-
-void print_command(int argc, char * const argv[]) {
-    for (int i = 0; i < argc; i++) {
-        fprintf(stdout, "%s ", argv[i]);
-    }
-    fprintf(stdout, "\n");
-}
-
-int run_init(int argc, char * const argv[]) {
-    char cwd[1024];
-    if (getcwd(cwd, sizeof(cwd)) == NULL) return 1;
-
+int create_configs();
+//int run_add(int argc, char * const argv[]);
+//int add_to_staging(char *filepath);
+//int run_reset(int argc, char * const argv[]);
+//int remove_from_staging(char *filepath);
+//int run_commit(int argc, char * const argv[]);
+//int inc_last_commit_ID();
+//bool check_file_directory_exists(char *filepath);
+//int commit_staged_file(int commit_ID, char *filepath);
+//int track_file(char *filepath);
+//bool is_tracked(char *filepath);
+//int create_commit_file(int commit_ID, char *message);
+//int find_file_last_commit(char* filepath);
+//int run_checkout(int argc, char *const argv[]);
+//int find_file_last_change_before_commit(char *filepath, int commit_ID);
+//int checkout_file(char *filepath, int commit_ID);
+int find_tnt(){
     char tmp_cwd[1024];
-    bool exists = false;
     struct dirent *entry;
     do {
         // find .tnt
@@ -61,393 +43,61 @@ int run_init(int argc, char * const argv[]) {
             return 1;
         }
         while ((entry = readdir(dir)) != NULL) {
-            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".tnt") == 0)
-                exists = true;
-        }
-        closedir(dir);
-
-        // update current working directory
-        if (getcwd(tmp_cwd, sizeof(tmp_cwd)) == NULL) return 1;
-
-        // change cwd to parent
-        if (strcmp(tmp_cwd, "/") != 0) {
-            if (chdir("..") != 0) return 1;
-        }
-
-    } while (strcmp(tmp_cwd, "/") != 0);
-
-    // return to the initial cwd
-    if (chdir(cwd) != 0) return 1;
-
-    if (!exists) {
-        if (mkdir(".tnt", 0755) != 0) return 1;
-        //return create_configs("mohsen", "mohsenghasemi8156@gmail.com");
-    } else {
-        perror("tnt repository has already initialized");
-    }
-    return 0;
-}
-
-int create_configs(char *username, char *email) {
-    FILE *file = fopen(".tnt/config", "w");
-    if (file == NULL) return 1;
-
-    fprintf(file, "username: %s\n", username);
-    fprintf(file, "email: %s\n", email);
-    fprintf(file, "last_commit_ID: %d\n", 0);
-    fprintf(file, "current_commit_ID: %d\n", 0);
-    fprintf(file, "branch: %s", "master");
-
-    fclose(file);
-
-    // create commits folder
-    if (mkdir(".tnt/commits", 0755) != 0) return 1;
-
-    // create files folder
-    if (mkdir(".tnt/files", 0755) != 0) return 1;
-
-    file = fopen(".tnt/staging", "w");
-    fclose(file);
-
-    file = fopen(".tnt/tracks", "w");
-    fclose(file);
-
-    return 0;
-}
-
-int run_add(int argc, char *const argv[]) {
-    // TODO: handle command in non-root directories 
-    if (argc < 3) {
-        perror("please specify a file");
-        return 1;
-    }
-
-    return add_to_staging(argv[2]);
-}
-
-int add_to_staging(char *filepath) {
-    FILE *file = fopen(".tnt/staging", "r");
-    if (file == NULL) return 1;
-    char line[MAX_LINE_LENGTH];
-    while (fgets(line, sizeof(line), file) != NULL) {
-        int length = strlen(line);
-
-        // remove '\n'
-        if (length > 0 && line[length - 1] == '\n') {
-            line[length - 1] = '\0';
-        }
-
-        if (strcmp(filepath, line) == 0) return 0;
-    }
-    fclose(file);
-
-    file = fopen(".tnt/staging","a");
-    if (file == NULL) return 1;
-
-    fprintf(file, "%s\n", filepath);
-    fclose(file);
-
-    return 0;
-}
-
-int run_reset(int argc, char *const argv[]) {
-    // TODO: handle command in non-root directories 
-    if (argc < 3) {
-        perror("please specify a file");
-        return 1;
-    }
-
-    return remove_from_staging(argv[2]);
-}
-
-int remove_from_staging(char *filepath) {
-    FILE *file = fopen(".tnt/staging", "r");
-    if (file == NULL) return 1;
-
-    FILE *tmp_file = fopen(".tnt/tmp_staging", "w");
-    if (tmp_file == NULL) return 1;
-
-    char line[MAX_LINE_LENGTH];
-    while (fgets(line, sizeof(line), file) != NULL) {
-        int length = strlen(line);
-
-        // remove '\n'
-        if (length > 0 && line[length - 1] == '\n') {
-            line[length - 1] = '\0';
-        }
-
-        if (strcmp(filepath, line) != 0) fputs(line, tmp_file);
-    }
-    fclose(file);
-    fclose(tmp_file);
-
-    remove(".tnt/staging");
-    rename(".tnt/tmp_staging", ".tnt/staging");
-    return 0;
-}
-
-int run_commit(int argc, char * const argv[]) {
-    if (argc < 4) {
-        perror("please use the correct format");
-        return 1;
-    }
-
-    char message[MAX_MESSAGE_LENGTH];
-    strcpy(message, argv[3]);
-
-    int commit_ID = inc_last_commit_ID();
-    if (commit_ID == -1) return 1;
-
-    FILE *file = fopen(".tnt/stage", "r");
-    if (file == NULL) return 1;
-    char line[MAX_LINE_LENGTH];
-    while (fgets(line, sizeof(line), file) != NULL) {
-        int length = strlen(line);
-
-        // remove '\n'
-        if (length > 0 && line[length - 1] == '\n') {
-            line[length - 1] = '\0';
-        }
-
-        if (!check_file_directory_exists(line)) {
-            char dir_path[MAX_FILENAME_LENGTH];
-            strcpy(dir_path, ".tnt/files/");
-            strcat(dir_path, line);
-            if (mkdir(dir_path, 0755) != 0) return 1;
-        }
-        printf("commit %s\n", line);
-        commit_staged_file(commit_ID, line);
-        track_file(line);
-    }
-    fclose(file);
-
-    // free staging
-    file = fopen(".tnt/staging", "w");
-    if (file == NULL) return 1;
-    fclose(file);
-
-    create_commit_file(commit_ID, message);
-    fprintf(stdout, "commit successfully with commit ID %d", commit_ID);
-
-    return 0;
-}
-
-// returns new commit_ID
-int inc_last_commit_ID() {
-    FILE *file = fopen(".tnt/config", "r");
-    if (file == NULL) return -1;
-
-    FILE *tmp_file = fopen(".tnt/tmp_config", "w");
-    if (tmp_file == NULL) return -1;
-
-    int last_commit_ID;
-    char line[MAX_LINE_LENGTH];
-    while (fgets(line, sizeof(line), file) != NULL) {
-        if (strncmp(line, "last_commit_ID", 14) == 0) {
-            sscanf(line, "last_commit_ID: %d\n", &last_commit_ID);
-            last_commit_ID++;
-            fprintf(tmp_file, "last_commit_ID: %d\n", last_commit_ID);
-
-        } else fprintf(tmp_file, "%s", line);
-    }
-    fclose(file);
-    fclose(tmp_file);
-
-    remove(".tnt/config");
-    rename(".tnt/tmp_config", ".tnt/config");
-    return last_commit_ID;
-}
-
-bool check_file_directory_exists(char *filepath) {
-    DIR *dir = opendir(".tnt/files");
-    struct dirent *entry;
-    if (dir == NULL) {
-        perror("Error opening current directory");
-        return 1;
-    }
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR && strcmp(entry->d_name, filepath) == 0) return true;
-    }
-    closedir(dir);
-
-    return false;
-}
-
-int commit_staged_file(int commit_ID, char* filepath) {
-    FILE *read_file, *write_file;
-    char read_path[MAX_FILENAME_LENGTH];
-    strcpy(read_path, filepath);
-    char write_path[MAX_FILENAME_LENGTH];
-    strcpy(write_path, ".tnt/files/");
-    strcat(write_path, filepath);
-    strcat(write_path, "/");
-    char tmp[10];
-    sprintf(tmp, "%d", commit_ID);
-    strcat(write_path, tmp);
-
-    read_file = fopen(read_path, "r");
-    if (read_file == NULL) return 1;
-
-    write_file = fopen(write_path, "w");
-    if (write_file == NULL) return 1;
-
-    char buffer;
-    buffer = fgetc(read_file);
-    while(buffer != EOF) {
-        fputc(buffer, write_file);
-        buffer = fgetc(read_file);
-    }
-    fclose(read_file);
-    fclose(write_file);
-
-    return 0;
-}
-
-int track_file(char *filepath) {
-    if (is_tracked(filepath)) return 0;
-
-    FILE *file = fopen(".tnt/tracks", "a");
-    if (file == NULL) return 1;
-    fprintf(file, "%s\n", filepath);
-    return 0;
-}
-
-bool is_tracked(char *filepath) {
-    FILE *file = fopen(".tnt/tracks", "r");
-    if (file == NULL) return false;
-    char line[MAX_LINE_LENGTH];
-    while (fgets(line, sizeof(line), file) != NULL) {
-        int length = strlen(line);
-
-        // remove '\n'
-        if (length > 0 && line[length - 1] == '\n') {
-            line[length - 1] = '\0';
-        }
-
-        if (strcmp(line, filepath) == 0) return true;
-
-    }
-    fclose(file);
-
-    return false;
-}
-
-int create_commit_file(int commit_ID, char *message) {
-    char commit_filepath[MAX_FILENAME_LENGTH];
-    strcpy(commit_filepath, ".tnt/commits/");
-    char tmp[10];
-    sprintf(tmp, "%d", commit_ID);
-    strcat(commit_filepath, tmp);
-
-    FILE *file = fopen(commit_filepath, "w");
-    if (file == NULL) return 1;
-
-    fprintf(file, "message: %s\n", message);
-    fprintf(file, "files:\n");
-
-    DIR *dir = opendir(".");
-    struct dirent *entry;
-    if (dir == NULL) {
-        perror("Error opening current directory");
-        return 1;
-    }
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG && is_tracked(entry->d_name)) {
-            int file_last_commit_ID = find_file_last_commit(entry->d_name);
-            fprintf(file, "%s %d\n", entry->d_name, file_last_commit_ID);
-        }
-    }
-    closedir(dir);
-    fclose(file);
-    return 0;
-}
-
-int find_file_last_commit(char* filepath) {
-    char filepath_dir[MAX_FILENAME_LENGTH];
-    strcpy(filepath_dir, ".tnt/files/");
-    strcat(filepath_dir, filepath);
-
-    int max = -1;
-
-    DIR *dir = opendir(filepath_dir);
-    struct dirent *entry;
-    if (dir == NULL) return 1;
-
-    while((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            int tmp = atoi(entry->d_name);
-            max = max > tmp ? max: tmp;
-        }
-    }
-    closedir(dir);
-
-    return max;
-}
-
-int run_checkout(int argc, char * const argv[]) {
-    if (argc < 3) return 1;
-
-    int commit_ID = atoi(argv[2]);
-
-    DIR *dir = opendir(".");
-    struct dirent *entry;
-    while((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG && is_tracked(entry->d_name)) {
-            checkout_file(entry->d_name, find_file_last_change_before_commit(entry->d_name, commit_ID));
-        }
-    }
-    closedir(dir);
-
-    return 0;
-}
-
-int find_file_last_change_before_commit(char *filepath, int commit_ID) {
-    char filepath_dir[MAX_FILENAME_LENGTH];
-    strcpy(filepath_dir, ".tnt/files/");
-    strcat(filepath_dir, filepath);
-
-    int max = -1;
-
-    DIR *dir = opendir(filepath_dir);
-    struct dirent *entry;
-    if (dir == NULL) return 1;
-
-    while((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            int tmp = atoi(entry->d_name);
-            if (tmp > max && tmp <= commit_ID) {
-                max = tmp;
+            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".tnt") == 0){
+                getcwd(tnt_path, sizeof(tnt_path));
+                strcat(tnt_path,"/.tnt");
             }
         }
-    }
-    closedir(dir);
-
-    return max;
-}
-
-int checkout_file(char *filepath, int commit_ID) {
-    char src_file[MAX_FILENAME_LENGTH];
-    strcpy(src_file, ".tnt/files/");
-    strcat(src_file, filepath);
-    char tmp[10];
-    sprintf(tmp, "/%d", commit_ID);
-    strcat(src_file, tmp);
-
-    FILE *read_file = fopen(src_file, "r");
-    if (read_file == NULL) return 1;
-    FILE *write_file = fopen(filepath, "w");
-    if (write_file == NULL) return 1;
-
-    char line[MAX_LINE_LENGTH];
-
-    while (fgets(line, sizeof(line), read_file) != NULL) {
-        fprintf(write_file, "%s", line);
-    }
-
-    fclose(read_file);
-    fclose(write_file);
-
+        closedir(dir);
+        if (getcwd(tmp_cwd, sizeof(tmp_cwd)) == NULL) return 1;     // update current working directory
+        if (strcmp(tmp_cwd, "/") != 0) {        // change cwd to parent
+            if (chdir("..") != 0) return 1;
+        }
+    } while (strcmp(tmp_cwd, "/") != 0);
+    if (chdir(cwd) != 0) return 1;  // return to the initial cwd
     return 0;
+}
+int run_init(int argc, char * const argv[]) {
+    if(find_tnt()) return 1;
+    if (tnt_path[0] == 0) {
+        if (mkdir(".tnt", 0755) != 0) return 1;
+        if (chdir(".tnt") != 0) return 1;
+        getcwd(tnt_path, sizeof(tnt_path));
+        return create_configs();
+    } else perror("tnt repository has already initialized");
+    return 0;
+}
+int create_configs(){
+    FILE *file;
+    struct passwd *pw = getpwuid(getuid());
+    if (chdir(pw->pw_dir) != 0) return 1;
+    if(access(".tnt_global_configs", F_OK) == -1){
+        printf("ye");
+        file = fopen(".tnt_global_config", "w");
+        fprintf(file,"user name:0\ndate and time:0\nuser email:0\ndate and time:0\nalias:\n");
+        fclose(file);
+    }
+    printf("finish access\n");
+    if (chdir(tnt_path) != 0) return 1;
+    file = fopen("tracks", "w");
+    fclose(file);
+    file = fopen("config", "w");
+    fprintf(file,"user name:0\ndate and time:0\nuser email:0\ndate and time:0\n");
+    fprintf(file,"last commit ID:0\ncurrent commit ID:0\nbranch:master");
+    fclose(file);
+    file = fopen("branches", "w");
+    fprintf(file,"master-0-");
+    fclose(file);
+    if (mkdir("COMMIT", 0755) != 0) return 1;
+    if (mkdir("STAGE", 0755) != 0) return 1;
+    if (chdir("STAGE") != 0) return 1;
+    file = fopen("add history", "w");
+    fclose(file);
+    if (chdir("..") != 0) return 1;
+    if (chdir("COMMIT") != 0) return 1;
+    file = fopen("commits", "w");
+    fclose(file);
+    return  0;
 }
 
 int main(int argc, char *argv[]) {
@@ -456,12 +106,10 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "please enter a valid command");
         return 1;
     }
-
-        //print_command(argc, argv);
-
-    else if (strcmp(argv[1], "init") == 0) {
+    if (getcwd(cwd, sizeof(cwd)) == NULL) return 1;
+    else if (strcmp(argv[1], "init") == 0){
         return run_init(argc, argv);
-    } else if (strcmp(argv[1], "add") == 0) {
+    } /*else if (strcmp(argv[1], "add") == 0){
         return run_add(argc, argv);
     } else if (strcmp(argv[1], "reset") == 0) {
         return run_reset(argc, argv);
@@ -469,7 +117,7 @@ int main(int argc, char *argv[]) {
         return run_commit(argc, argv);
     } else if (strcmp(argv[1], "checkout") == 0) {
         return run_checkout(argc, argv);
-    }
+    }*/
 
     return 0;
 }
