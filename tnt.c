@@ -20,8 +20,10 @@ char time_now[100];
 int run_init(int argc, char * const argv[]);
 int create_configs();
 int run_config(int argc, char * const argv[]);
-//int run_add(int argc, char * const argv[]);
-//int add_to_staging(char *filepath);
+int run_add(int argc, char * const argv[]);
+int file_or_directory(char * path);
+int add_to_staging(char * path);
+void copyFile(const char *sourcePath, const char *destinationPath);
 //int run_reset(int argc, char * const argv[]);
 //int remove_from_staging(char *filepath);
 //int run_commit(int argc, char * const argv[]);
@@ -94,7 +96,7 @@ int create_configs(){
     if (mkdir("COMMIT", 0755) != 0) return 1;
     if (mkdir("STAGE", 0755) != 0) return 1;
     if (chdir("STAGE") != 0) return 1;
-    file = fopen("add history", "w");
+    file = fopen("history", "w");
     fclose(file);
     if (chdir("..") != 0) return 1;
     if (chdir("COMMIT") != 0) return 1;
@@ -104,6 +106,7 @@ int create_configs(){
 }
 int run_config(int argc, char * const argv[]){
     char space[40];
+    int m=0;
     strcpy(space,"                                   ");
     FILE *file;
     char buffer[512];
@@ -111,92 +114,142 @@ int run_config(int argc, char * const argv[]){
     if(argc < 3 ){
         fprintf(stdout, "please enter a valid command\n");
         return 1;
-    } if(strcmp(argv[2], "-global") == 0){
-        if(argc < 4 ){
-            fprintf(stdout, "please enter a valid command\n");
-            return 1;
-        }
+    } if(strcmp(argv[2], "-global") == 0) {
+        m = 1;
         struct passwd *pw = getpwuid(getuid());
         if (chdir(pw->pw_dir) != 0) return 1;
-        if(access(".tnt_global_configs", F_OK) == -1){   //make global configs' place
+        if (access(".tnt_global_configs", F_OK) == -1) {   //make global configs' place
             file = fopen(".tnt_global_configs", "w");
-            fprintf(file,"user name:%s\ndate and time:%s\nuser email:%s\ndate and time:%s\nalias:\n",space,space,space,space);
+            fprintf(file, "user name:%s\ndate and time:%s\nuser email:%s\ndate and time:%s\nalias:\n", space, space,
+                    space, space);
             fclose(file);
         }
-        file = fopen(".tnt_global_configs","r+");
-        if(strcmp(argv[3], "user.name") == 0){
-            if(argc < 5 ){
-                fprintf(stdout, "please enter a valid command\n");
-                return 1;
-            }if(strlen(argv[4])>30 || argc > 5){
-                fprintf(stdout, "Your username can has a maximum of 30 characters without space\n");
-                return 1;
-            }
-            sprintf(data, "user name:%s", argv[4]);
-            fputs( data, file);
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            sprintf(data, "date and time:%s", time_now);
-            fputs( data, file);
-            fclose(file);
-        }else if(strcmp(argv[3], "user.email") == 0) {
-            if (argc < 5) {
-                fprintf(stdout, "please enter a valid command\n");
-                return 1;
-            }if (strlen(argv[4]) > 30 || argc > 5) {
-                fprintf(stdout, "Your email can has a maximum of 30 characters without space\n");
-                return 1;
-            }
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            sprintf(data, "user email:%s", argv[4]);
-            fputs(data, file);
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            sprintf(data, "date and time:%s", time_now);
-            fputs(data, file);
-            fclose(file);
-        }
-
-    }else{
-        if(find_tnt()==1 || tnt_path[0]==0) {
-            fprintf(stdout, "There is not any repository");
+    }else {
+        if (find_tnt() == 1 || tnt_path[0] == 0) {
+            fprintf(stdout, "There is not any repository\n");
             return 1;
-        }if (chdir(tnt_path) != 0) return 1;
-        if(strcmp(argv[2], "user.name") == 0){
-            if(argc < 4 ){
-                fprintf(stdout, "please enter a valid command\n");
-                return 1;
-            }if(strlen(argv[3])>30 || argc > 4){
-                fprintf(stdout, "Your username can has a maximum of 30 characters without space\n");
-                return 1;
-            } if((file = fopen("config","r+")) == NULL) return 1;
-            sprintf(data, "user name:%s", argv[3]);
-            fputs( data, file);
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            sprintf(data, "date and time:%s", time_now);
-            fputs( data, file);
-            fclose(file);
-        }else if(strcmp(argv[2], "user.email") == 0) {
-            if (argc < 4) {
-                fprintf(stdout, "please enter a valid command\n");
-                return 1;
-            }if (strlen(argv[3]) > 30 || argc > 4) {
-                fprintf(stdout, "Your email can has a maximum of 30 characters without space\n");
-                return 1;
-            }if((file = fopen("config","r+")) == NULL) return 1;
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            sprintf(data, "user email:%s", argv[3]);
-            fputs(data, file);
-            if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
-            sprintf(data, "date and time:%s", time_now);
-            fputs(data, file);
-            fclose(file);
         }
+        if (chdir(tnt_path) != 0) return 1;
     }
-
+    if(argc < 3+m ){
+        fprintf(stdout, "please enter a valid command\n");
+        return 1;
+    }
+    if(strcmp(argv[2+m], "user.name") == 0){
+        if(m) file = fopen(".tnt_global_configs","r+");
+        else if((file = fopen("config","r+")) == NULL) return 1;
+        if(argc < 4+m ){
+            fprintf(stdout, "please enter a valid command\n");
+            return 1;
+        }if(strlen(argv[3+m])>30 || argc > 4+m){
+            fprintf(stdout, "Your username can has a maximum of 30 characters without space\n");
+            return 1;
+        }
+        sprintf(data, "user name:%s ", argv[3+m]);
+        fputs( data, file);
+        if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
+        sprintf(data, "date and time:%s ", time_now);
+        fputs( data, file);
+        fclose(file);
+    }else if(strcmp(argv[2+m], "user.email") == 0) {
+        if(m) file = fopen(".tnt_global_configs","r+");
+        else if((file = fopen("config","r+")) == NULL) return 1;
+        if (argc < 4+m) {
+            fprintf(stdout, "please enter a valid command\n");
+            return 1;
+        }if (strlen(argv[3+m]) > 30 || argc > 4+m) {
+            fprintf(stdout, "Your email can has a maximum of 30 characters without space\n");
+            return 1;
+        }
+        if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
+        if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
+        sprintf(data, "user email:%s ", argv[3+m]);
+        fputs(data, file);
+        if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
+        sprintf(data, "date and time:%s ", time_now);
+        fputs(data, file);
+        fclose(file);
+    }else{
+        fprintf(stdout, "please enter a valid command\n");
+        return 1;
+    }
     return  0;
 }
-
+int file_or_directory(char * path){
+    struct stat file_info;
+    if (lstat(path, &file_info) == -1) {
+        printf("Error while getting file information\n");
+        return 0;
+    }
+    if (S_ISREG(file_info.st_mode)) {   //file
+        return 1;
+    } else if (S_ISDIR(file_info.st_mode)) {  //directory
+        return 2;
+    }else {
+        printf("Input is neither a regular file nor a directory.\n");
+        return 0;
+    }
+}
+int run_add(int argc, char * const argv[]){
+    if(argc < 3 ){
+        fprintf(stdout, "please enter a valid command\n");
+        return 1;
+    }if(argv[2][0] != '-'){
+        int check = file_or_directory(argv[2]);
+        if(!check) return 1;
+        if(check==1){
+            return add_to_staging(argv[2]);
+        }
+    }
+    return 0;
+}
+int add_to_staging(char *path){
+    int ID=0;
+    FILE *history;
+    char add_data[2048];
+    sprintf(add_data,"%s/STAGE/history", tnt_path);
+    history= fopen(add_data,"r+");
+    char line[512];
+    while(fgets(line, sizeof(line), history) != NULL){
+        if(strstr(line, path) != NULL){
+            fputs("STAGE=2\n", history);
+        }
+        if(strstr(line, "ID=") != NULL) sscanf(line ,"ID=%d", &ID);
+    }
+    fclose(history);
+    char sourcePath[512];
+    strcpy(sourcePath,path);
+    char destinationPath[2048];
+    sprintf(destinationPath,"%s/STAGE/%d", tnt_path, ID+1);
+    copyFile(sourcePath, destinationPath);
+    history= fopen(add_data,"a");
+    char new_data[1024];
+    sprintf(new_data,"PATH=%s\nSTAGE=1\nID=%d\n", path, ID+1);
+    fputs(new_data, history);
+    fclose(history);
+    return 0;
+}
+void copyFile(const char *sourcePath, const char *destinationPath) {
+    FILE *sourceFile = fopen(sourcePath, "rb");
+    if (sourceFile == NULL) {
+        perror("Error opening source file");
+        return;
+    }
+    FILE *destinationFile = fopen(destinationPath, "wb");
+    if (destinationFile == NULL) {
+        perror("Error opening destination file");
+        fclose(sourceFile);
+        return;
+    }
+    const size_t bufferSize = 10000;
+    char buffer[bufferSize];
+    size_t bytesRead;
+    while ((bytesRead = fread(buffer, 1, bufferSize, sourceFile)) > 0) {
+        fwrite(buffer, 1, bytesRead, destinationFile);
+    }
+    fclose(sourceFile);
+    fclose(destinationFile);
+}
 int main(int argc, char *argv[]) {
     time_t raw_time;
     static struct tm *time_info;
@@ -216,9 +269,9 @@ int main(int argc, char *argv[]) {
     } else if(find_tnt()==1 || tnt_path[0]==0) {
         fprintf(stdout, "There is not any repository");
         return 1;
-    }/*else if (strcmp(argv[1], "add") == 0){
+    }else if (strcmp(argv[1], "add") == 0){
         return run_add(argc, argv);
-    } else if (strcmp(argv[1], "reset") == 0) {
+    } /*else if (strcmp(argv[1], "reset") == 0) {
         return run_reset(argc, argv);
     } else if (strcmp(argv[1], "commit") == 0) {
         return run_commit(argc, argv);
