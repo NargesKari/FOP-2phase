@@ -24,6 +24,7 @@ int run_add(int argc, char * const argv[]);
 int file_or_directory(char * path);
 int add_to_staging(char * path);
 void copyFile(const char *sourcePath, const char *destinationPath);
+int check_wildcard(char * wildcard, char  * word);
 //int run_reset(int argc, char * const argv[]);
 //int remove_from_staging(char *filepath);
 //int run_commit(int argc, char * const argv[]);
@@ -178,7 +179,7 @@ int run_config(int argc, char * const argv[]){
 int file_or_directory(char * path){
     struct stat file_info;
     if (lstat(path, &file_info) == -1) {
-        printf("Error while getting file information\n");
+        printf("Error while getting %s information\n",path);
         return 0;
     }
     if (S_ISREG(file_info.st_mode)) {   //file
@@ -191,14 +192,39 @@ int file_or_directory(char * path){
     }
 }
 int run_add(int argc, char * const argv[]){
-    if(argc < 3 ){
+    char path[1024];
+    if(argc < 3 ) {
         fprintf(stdout, "please enter a valid command\n");
         return 1;
-    }if(argv[2][0] != '-'){
-        int check = file_or_directory(argv[2]);
-        if(!check) return 1;
-        if(check==1){
-            return add_to_staging(argv[2]);
+    }if(strcmp(argv[2], "-redo") == 0){
+        FILE *history;
+        char add_data[2048];
+        sprintf(add_data,"%s/STAGE/history", tnt_path);
+        history= fopen(add_data,"r+");
+        char line[512];
+        while(fgets(line, sizeof(line), history) != NULL){
+            if(strstr(line, "STAGE=0") != NULL) fputs("STAGE=1\n", history);
+        }
+        return 0;
+    }else if(strcmp(argv[2], "-f")==0 || argv[2][0] != '-'){
+        int m=3;
+        if(argv[2][0] != '-') m=2;
+        for(int i=m ; i<argc; i++){
+            int check = file_or_directory(argv[i]);
+            if(!check){
+                if(i==argc-1) return 1;
+            }
+            if(check == 1) return add_to_staging(argv[i]);
+            else if(check == 2){
+                DIR *dir = opendir(argv[i]);
+                struct dirent *entry;
+                while ((entry = readdir(dir)) != NULL) {
+                    if (entry->d_type != DT_DIR){
+                        sprintf(path,"%s/%s",argv[i],entry->d_name);
+                        add_to_staging(path);
+                    }
+                }
+            }
         }
     }
     return 0;
@@ -211,9 +237,7 @@ int add_to_staging(char *path){
     history= fopen(add_data,"r+");
     char line[512];
     while(fgets(line, sizeof(line), history) != NULL){
-        if(strstr(line, path) != NULL){
-            fputs("STAGE=2\n", history);
-        }
+        if(strstr(line, path) != NULL) fputs("STAGE=2\n", history);
         if(strstr(line, "ID=") != NULL) sscanf(line ,"ID=%d", &ID);
     }
     fclose(history);
@@ -250,6 +274,14 @@ void copyFile(const char *sourcePath, const char *destinationPath) {
     fclose(sourceFile);
     fclose(destinationFile);
 }
+int check_wildcard(char * wildcard, char  * word){
+    char start[512] ,end[512];
+    strcpy(start, wildcard);
+    *(strstr(start, "*"))='\0';
+    strcpy(end, strstr(wildcard, "*"));
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
     time_t raw_time;
     static struct tm *time_info;
