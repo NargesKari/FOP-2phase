@@ -1,8 +1,8 @@
 #include <stdio.h>
-//#include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
-//#include <stdbool.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -20,11 +20,13 @@ char time_now[100];
 int run_init(int argc, char * const argv[]);
 int create_configs();
 int run_config(int argc, char * const argv[]);
-int run_add(int argc, char * const argv[]);
+int manage_add_mode(int argc, char * const argv[]);
+void run_add(char * path);
 int file_or_directory(char * path);
 int add_to_staging(char * path);
+void exploreDirectory(const char *path, long depth);
 void copyFile(const char *sourcePath, const char *destinationPath);
-int check_wildcard(char * wildcard, char  * word);
+bool matchWildcard(const char *word, const char *pattern);
 //int run_reset(int argc, char * const argv[]);
 //int remove_from_staging(char *filepath);
 //int run_commit(int argc, char * const argv[]);
@@ -42,7 +44,6 @@ int find_tnt(){
     char tmp_cwd[1024];
     struct dirent *entry;
     do {
-        // find .tnt
         DIR *dir = opendir(".");
         if (dir == NULL) {
             perror("Error opening current directory");
@@ -191,8 +192,7 @@ int file_or_directory(char * path){
         return 0;
     }
 }
-int run_add(int argc, char * const argv[]){
-    char path[1024];
+int manage_add_mode(int argc, char * const argv[]){
     if(argc < 3 ) {
         fprintf(stdout, "please enter a valid command\n");
         return 1;
@@ -206,28 +206,70 @@ int run_add(int argc, char * const argv[]){
             if(strstr(line, "STAGE=0") != NULL) fputs("STAGE=1\n", history);
         }
         return 0;
-    }else if(strcmp(argv[2], "-f")==0 || argv[2][0] != '-'){
-        int m=3;
-        if(argv[2][0] != '-') m=2;
-        for(int i=m ; i<argc; i++){
-            int check = file_or_directory(argv[i]);
-            if(!check){
-                if(i==argc-1) return 1;
+    }else if( strstr(argv[2],"*")!= NULL){
+        DIR *dir = opendir(".");
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (matchWildcard(entry->d_name, argv[2])){
+                char path[2048];
+                sprintf(path, "%s/%s", cwd, entry->d_name);
+                run_add(path);
             }
-            if(check == 1) return add_to_staging(argv[i]);
-            else if(check == 2){
-                DIR *dir = opendir(argv[i]);
-                struct dirent *entry;
-                while ((entry = readdir(dir)) != NULL) {
-                    if (entry->d_type != DT_DIR){
-                        sprintf(path,"%s/%s",argv[i],entry->d_name);
-                        add_to_staging(path);
-                    }
-                }
+        }
+    }else if(strcmp(argv[2], "-f")==0) {
+        if(argc < 4 ) fprintf(stdout, "please enter a valid command\n");
+        for (int i = 3; i < argc; i++) {
+            run_add(argv[i]);
+        }return 0;
+    }else if(strcmp(argv[2], "-n") == 0){
+        if(argc < 4 ){
+            fprintf(stdout, "please enter a valid command\n");
+            return 1;
+        }
+        char *check;
+        long depth= strtol(argv[3], &check,10);
+        if( *check != '\0' || depth < 1){
+            fprintf(stdout, "please enter a valid command\n");
+            return 1;
+        }
+        exploreDirectory(cwd, depth);
+    }else if(argv[2][0] != '-') {
+        run_add(argv[2]);
+    }else{
+        fprintf(stdout, "please enter a valid command\n");
+        return 1;
+    }
+    return 0;
+}
+void exploreDirectory(const char *path, long depth) {
+    DIR *directory = opendir(path);
+    if (depth == 0 || directory == NULL) return;
+    struct dirent *entry;
+    while ((entry = readdir(directory)) != NULL) {
+        if (strncmp(entry->d_name, ".",1) == 0 ) continue;
+        char address[PATH_MAX];
+        strcpy(address,"");
+        sprintf(address,  "%s/%s", path, entry->d_name);
+        run_add(address);
+        if (entry->d_type == DT_DIR) exploreDirectory(address, depth - 1);
+    }
+    closedir(directory);
+}
+void run_add(char * path){
+    char path1[512];
+    int check= file_or_directory(path);
+    if(check == 1) add_to_staging(path);
+    else if(check == 2){
+        DIR *dir = opendir(path);
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type != DT_DIR){
+                strcpy(path1,"");
+                sprintf(path1,"%s/%s",path,entry->d_name);
+                add_to_staging(path1);
             }
         }
     }
-    return 0;
 }
 int add_to_staging(char *path){
     int ID=0;
@@ -236,16 +278,15 @@ int add_to_staging(char *path){
     sprintf(add_data,"%s/STAGE/history", tnt_path);
     history= fopen(add_data,"r+");
     char line[512];
+
     while(fgets(line, sizeof(line), history) != NULL){
         if(strstr(line, path) != NULL) fputs("STAGE=2\n", history);
         if(strstr(line, "ID=") != NULL) sscanf(line ,"ID=%d", &ID);
     }
     fclose(history);
-    char sourcePath[512];
-    strcpy(sourcePath,path);
     char destinationPath[2048];
     sprintf(destinationPath,"%s/STAGE/%d", tnt_path, ID+1);
-    copyFile(sourcePath, destinationPath);
+    copyFile(path, destinationPath);
     history= fopen(add_data,"a");
     char new_data[1024];
     sprintf(new_data,"PATH=%s\nSTAGE=1\nID=%d\n", path, ID+1);
@@ -255,8 +296,9 @@ int add_to_staging(char *path){
 }
 void copyFile(const char *sourcePath, const char *destinationPath) {
     FILE *sourceFile = fopen(sourcePath, "rb");
+    printf("%s\n", sourcePath);
     if (sourceFile == NULL) {
-        perror("Error opening source file");
+        printf("Error opening source file:%s\n",sourcePath);
         return;
     }
     FILE *destinationFile = fopen(destinationPath, "wb");
@@ -274,13 +316,16 @@ void copyFile(const char *sourcePath, const char *destinationPath) {
     fclose(sourceFile);
     fclose(destinationFile);
 }
-int check_wildcard(char * wildcard, char  * word){
-    char start[512] ,end[512];
-    strcpy(start, wildcard);
-    *(strstr(start, "*"))='\0';
-    strcpy(end, strstr(wildcard, "*"));
-    return 1;
+bool matchWildcard(const char *word, const char *pattern) {
+    if (*pattern == '\0') {
+        return *word == '\0';
+    }
+    if (*pattern == '*') {
+        return matchWildcard(word, pattern + 1) || (*word != '\0' && matchWildcard(word + 1, pattern));
+    }
+    return (*word != '\0' && (*word == *pattern || *pattern == '?')) && matchWildcard(word + 1, pattern + 1);
 }
+
 
 int main(int argc, char *argv[]) {
     time_t raw_time;
@@ -302,7 +347,7 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "There is not any repository");
         return 1;
     }else if (strcmp(argv[1], "add") == 0){
-        return run_add(argc, argv);
+        return manage_add_mode(argc, argv);
     } /*else if (strcmp(argv[1], "reset") == 0) {
         return run_reset(argc, argv);
     } else if (strcmp(argv[1], "commit") == 0) {
