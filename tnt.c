@@ -16,11 +16,15 @@
 char cwd[1024];
 char tnt_path[1024];
 char Time[100];
-char histoy_path[2048];
+char history_path[2048];
+char tracks_path[2048];
 //void print_command(int argc, char * const argv[]);
+int compareTimes(const char *timeStr1, const char *timeStr2);
 int run_init(int argc, char * const argv[]);
 int create_configs();
 int run_config(int argc, char * const argv[]);
+void make_space(char str[],long targetLength);
+int check_command(char *command);
 int manage_add_mode(int argc, char * const argv[]);
 void run_add(char * path);
 int file_or_directory(char * path);
@@ -82,6 +86,19 @@ int run_init(int argc, char * const argv[]) {
     return 0;
 }
 int create_configs(){
+    char Name[256],Date_Time[256],Email[256],Last_ID[256],Current_ID[256],branch[256];
+    strcpy(Name,"user name:");
+    make_space(Name,100);
+    strcpy(Date_Time,"date and time:");
+    make_space(Date_Time,100);
+    strcpy(Email,"user email:");
+    make_space(Email,100);
+    strcpy(Last_ID,"last commit ID:");
+    make_space(Last_ID,100);
+    strcpy(Current_ID,"current commit ID:");
+    make_space(Current_ID,100);
+    strcpy(branch,"Branch:master");
+    make_space(branch,100);
     char space[40];
     strcpy(space,"                                   ");
     FILE *file;
@@ -89,15 +106,15 @@ int create_configs(){
     if (chdir(pw->pw_dir) != 0) return 1;   //go to user folder
     if(access(".tnt_global_configs", F_OK) == -1){   //make global configs' place
         file = fopen(".tnt_global_configs", "w");
-        fprintf(file,"user name:%s\ndate and time:%s\nuser email:%s\ndate and time:%s\nalias:\n",space,space,space,space);
+        fprintf(file, "%s\n%s\n%s\n%s\nalias:\n", Name, Date_Time, Email, Date_Time);
         fclose(file);
     }
     if (chdir(tnt_path) != 0) return 1;
     file = fopen("tracks", "w");
     fclose(file);
     file = fopen("config", "w");
-    fprintf(file,"user name:%s\ndate and time:%s\nuser email:%s\ndate and time:%s\n",space,space,space,space);
-    fprintf(file,"last commit ID:%s\ncurrent commit ID:%s\nbranch:master%s\nalias:\n",space,space,space);
+    fprintf(file, "%s\n%s\n%s\n%s\nalias:\n", Name, Date_Time, Email, Date_Time);
+    fprintf(file,"%s\n%s\n%s\nalias:\n", Last_ID, Current_ID, branch);
     fclose(file);
     file = fopen("branches", "w");
     fprintf(file,"master-0-");
@@ -114,9 +131,14 @@ int create_configs(){
     return  0;
 }
 int run_config(int argc, char * const argv[]){
-    char space[40];
+    char Name[256],Date_Time[256],Email[256];
+    strcpy(Name,"user name:");
+    make_space(Name,100);
+    strcpy(Date_Time,"date and time:");
+    make_space(Date_Time,100);
+    strcpy(Email,"user email:");
+    make_space(Email,100);
     int m=0;
-    strcpy(space,"                                   ");
     FILE *file;
     char buffer[512];
     char data[256];
@@ -129,8 +151,7 @@ int run_config(int argc, char * const argv[]){
         if (chdir(pw->pw_dir) != 0) return 1;
         if (access(".tnt_global_configs", F_OK) == -1) {   //make global configs' place
             file = fopen(".tnt_global_configs", "w");
-            fprintf(file, "user name:%s\ndate and time:%s\nuser email:%s\ndate and time:%s\nalias:\n", space, space,
-                    space, space);
+            fprintf(file, "%s\n%s\n%s\n%s\nalias:\n", Name, Date_Time, Email, Date_Time);
             fclose(file);
         }
     }else {
@@ -178,16 +199,90 @@ int run_config(int argc, char * const argv[]){
         sprintf(data, "date and time:%s ", Time);
         fputs(data, file);
         fclose(file);
+    }else if(strncmp(argv[2+m], "alias.",6) == 0){
+        char command[256];
+//        if(!check_command(argv[3+m])){
+//            printf("%s\n",argv[3+m]);
+//            return 1;
+//        }
+        sprintf(command,"Command:%s",argv[3+m]);
+        make_space(command,100);
+        strcat(command,"\n");
+        if(m) {
+            if((file = fopen(".tnt_global_configs","r+")) == NULL) {
+                printf("Error we lost tnt_global_configs\n"); return 1;
+            }
+        }
+        else if((file = fopen("config","r+")) == NULL) return 1;
+        char name[256];
+        sprintf(name,"Name:%s",strstr(argv[2+m], ".")+1);
+        make_space(name,100);
+        strcat(name,"\n");
+        char line[256];
+        while(fgets(line, sizeof(line), file) != NULL){
+            if(strcmp(line, name) == 0){
+                fputs(command,file);
+//                fgets(line, sizeof(line), file);
+                fprintf(file,"Time:%s\n", Time);
+                return 0;
+            }
+        }
+        if(m) file = fopen(".tnt_global_configs","a");
+        else file = fopen("config","a");
+        fprintf(file,"%s%sTime:%s\n",name,command,Time);
+        fclose(file);
+        return 0;
     }else{
         fprintf(stdout, "please enter a valid command\n");
         return 1;
     }
     return  0;
 }
+int check_command(char *command){
+    int result = system(command);
+    if (WIFEXITED(result) && WEXITSTATUS(result) == 0) return 1;
+    return 0;
+}
+void make_space(char str[],long targetLength){
+    long currentLength = strlen(str);
+    if (currentLength < targetLength) {
+        long numSpacesToAdd = targetLength - currentLength;
+        for (int i = 0; i < numSpacesToAdd; ++i) {
+            strcat(str, " ");
+        }
+    }
+}
 int file_or_directory(char * path){
     struct stat file_info;
     if (lstat(path, &file_info) == -1) {
-        printf("Error while getting %s information\n",path);
+        int check = 1;
+        FILE *tracks = fopen(tracks_path, "r+");
+        if (tracks == NULL) {
+            printf("Error in opening tracks file!\n");
+            return 0;
+        }
+        char buffer[1000];
+        while (fscanf(tracks, "%s", buffer) == 1) {
+            if (strstr(buffer, path) != NULL) {
+                check = 0;
+                unsigned long offset = ftell(tracks);
+                fseek(tracks, offset-strlen(buffer), SEEK_SET);
+                for(int i=0; i< strlen(buffer); i++){
+                    fputs(" ", tracks);
+                }
+            }
+        }
+        if(check) printf("Error while getting %s information\n",path);
+        else{
+            FILE *history;
+            history= fopen(history_path,"r+");
+            char line[512];
+            char check_path[512];
+            sprintf(check_path,"PATH:%s\n",path);
+            while(fgets(line, sizeof(line), history) != NULL){
+                if(strcmp(check_path, line)==0) fputs("STAGE:2\n", history);
+            }
+        }
         return 0;
     }
     if (S_ISREG(file_info.st_mode)) {   //file
@@ -205,7 +300,7 @@ int manage_add_mode(int argc, char * const argv[]){
         return 1;
     }if(strcmp(argv[2], "-redo") == 0){
         FILE *history;
-        history= fopen(histoy_path,"r+");
+        history= fopen(history_path,"r+");
         char line[512];
         while(fgets(line, sizeof(line), history) != NULL){
             if(strstr(line, "STAGE:0") != NULL){
@@ -271,8 +366,10 @@ void exploreDirectory(const char *path, long depth) {
 void run_add(char * path){
     char path1[512];
     int check= file_or_directory(path);
-    if(check == 1)
+    if(check == 1){
+        if(add_to_tracking(path)) return;
         add_to_staging(path);
+    }
     else if(check == 2){
         DIR *dir = opendir(path);
         struct dirent *entry;
@@ -287,9 +384,7 @@ void run_add(char * path){
     }
 }
 int add_to_tracking(char * path){
-    char tracks[2048];
-    sprintf(tracks,"%s/tracks", tnt_path);
-    FILE *file = fopen(tracks, "a+");
+    FILE *file = fopen(tracks_path, "a+");
     if (file == NULL) {
         printf("Error in opening tracks file!\n");
         return 1;
@@ -309,7 +404,7 @@ int add_to_tracking(char * path){
 int add_to_staging(char *path){
     int ID=0;
     FILE *history;
-    history= fopen(histoy_path,"r+");
+    history= fopen(history_path,"r+");
     char line[512];
     char check_path[512];
     sprintf(check_path,"PATH:%s\n",path);
@@ -321,7 +416,7 @@ int add_to_staging(char *path){
     char destinationPath[2048];
     sprintf(destinationPath,"%s/STAGE/%d", tnt_path, ID+1);
     copyFile(path, destinationPath);
-    history= fopen(histoy_path,"a");
+    history= fopen(history_path,"a");
     char new_data[1024];
     sprintf(new_data,"Time:%s\nPATH:%s\nSTAGE:1\nID:%d\n", Time, path, ID+1);
     fputs(new_data, history);
@@ -393,7 +488,7 @@ int manage_reset_mode(int argc, char * const argv[]){
             return 1;
         }
         FILE *history;
-        history= fopen(histoy_path,"r");
+        history= fopen(history_path,"r");
         char line[512];
         while(fgets(line, sizeof(line), history) != NULL){
             count_line++;
@@ -412,7 +507,7 @@ int manage_reset_mode(int argc, char * const argv[]){
 int run_reset(char * str){
     int check=1;
     FILE *history;
-    history= fopen(histoy_path,"r+");
+    history= fopen(history_path,"r+");
     char line[512];
     while(fgets(line, sizeof(line), history) != NULL){
         if(strstr(line, str) != NULL){
@@ -433,13 +528,13 @@ int reset_by_time(long line_numb){
     int first=0;
     char time_line[512];
     char line[512];
-    FILE *history= fopen(histoy_path,"r");
+    FILE *history= fopen(history_path,"r");
     while(fgets(time_line, sizeof(time_line), history) != NULL){
         line_numb--;
         if(line_numb == 0) break;
     }
     fclose(history);
-    history= fopen(histoy_path,"r+");
+    history= fopen(history_path,"r+");
     while(fgets(line, sizeof(line), history) != NULL){
         first++;
         if(strstr(line, time_line) != NULL){
@@ -455,12 +550,80 @@ int reset_by_time(long line_numb){
     }
     return 0;
 }
+int Alias(int argc, char *argv[]){
+    char Command_global[256],Time_global[256];
+    char Command_local[256],Time_local[256];
+    char line[512], name[256];
+    sprintf(name, "Name:%s ",argv[1]);
+    FILE *global_config, *local_config;
+    struct passwd *pw = getpwuid(getuid());
+    if (chdir(pw->pw_dir) != 0) return 1;
+    if ((global_config = fopen(".tnt_global_configs", "r")) == NULL)
+        printf("We lost global configs!");
+    else{
+        while(fgets(line, sizeof(line), global_config) != NULL){
+            if(strstr(line,name)!= NULL){
+                fgets(line, sizeof(line), global_config);
+                sscanf(line, "Command:%[^\n]",Command_global);
+                fgets(line, sizeof(line), global_config);
+                sscanf(line, "Time:%s",Time_global);
+            }
+        }
+        fclose(global_config);
+    }
+    if (chdir(tnt_path) != 0) return 1;
+    if((local_config = fopen("config","r")) == NULL) return 1;
+    while(fgets(line, sizeof(line), local_config) != NULL){
+        if(strstr(line,name)!= NULL){
+            fgets(line, sizeof(line), local_config);
+            sscanf(line, "Command:%[^\n]",Command_local);
+            fgets(line, sizeof(line), local_config);
+            sscanf(line, "Time:%s",Time_local);
+        }
+    }
+    fclose(global_config);
+    if( Command_global[0] == 0 && Command_local[0] != 0)
+        system(Command_local);
+    else if(Command_global[0] != 0 && Command_local[0] == 0)
+        system(Command_global);
+    else if(Command_global[0] != 0 && Command_local[0] != 0){
+        if(compareTimes(Time_local, Time_global) > 0) system(Command_local);
+        else system(Command_global);
+    }else{
+        printf("please enter a valid command\n");
+        return 1;
+    }
+    return 0;
+}
+int compareTimes(const char *timeStr1, const char *timeStr2){
+    struct tm tm1, tm2;
+    time_t time1, time2;
+    if (sscanf(timeStr1, "%d-%d-%d/%d:%d:%d",
+               &tm1.tm_year, &tm1.tm_mon, &tm1.tm_mday,
+               &tm1.tm_hour, &tm1.tm_min, &tm1.tm_sec) != 6) {
+        return 0;
+    }
+    if (sscanf(timeStr2, "%d-%d-%d/%d:%d:%d",
+               &tm2.tm_year, &tm2.tm_mon, &tm2.tm_mday,
+               &tm2.tm_hour, &tm2.tm_min, &tm2.tm_sec) != 6) {
+        return 0;
+    }
+    tm1.tm_year -= 2000;
+    tm1.tm_mon -= 1;
+    tm2.tm_year -= 2000;
+    tm2.tm_mon -= 1;
+    time1 = mktime(&tm1);
+    time2 = mktime(&tm2);
+    if (time1 < time2) return -1;
+    else if (time1 > time2) return 1;
+    return 0;
+}
 int main(int argc, char *argv[]) {
     time_t raw_time;
     static struct tm *time_info;
     time(&raw_time);
     time_info = localtime(&raw_time);
-    strftime(Time, sizeof(Time), "%Y-%m-%d %H:%M:%S", time_info);
+    strftime(Time, sizeof(Time), "%Y-%m-%d/%H:%M:%S", time_info);
 
     if (argc < 2) {
         fprintf(stdout, "please enter a valid command");
@@ -475,12 +638,15 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "There is not any repository\n");
         return 1;
     }
-    sprintf(histoy_path,"%s/STAGE/history", tnt_path);
+    sprintf(history_path,"%s/STAGE/history", tnt_path);
+    sprintf(tracks_path,"%s/tracks", tnt_path);
     if (strcmp(argv[1], "add") == 0){
         return manage_add_mode(argc, argv);
     } else if (strcmp(argv[1], "reset") == 0) {
         return manage_reset_mode(argc, argv);
-    } /*else if (strcmp(argv[1], "commit") == 0) {
+    } else{
+        return Alias(argc, argv);
+    }/*else if (strcmp(argv[1], "commit") == 0) {
         return run_commit(argc, argv);
     } else if (strcmp(argv[1], "checkout") == 0) {
         return run_checkout(argc, argv);
