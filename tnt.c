@@ -6,13 +6,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <time.h>
-//#include <sys/types.h>
 #include <pwd.h>
-//#define MAX_FILENAME_LENGTH 1000
-//#define MAX_COMMIT_MESSAGE_LENGTH 2000
-//#define MAX_LINE_LENGTH 1000
-//#define MAX_MESSAGE_LENGTH 1000
-//#define debug(x) printf("%s", x);
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
 char cwd[1024];
 char tnt_path[1024];
 char Time[100];
@@ -1314,6 +1310,89 @@ int run_checkout(int argc, char *argv[]){
     checkout_commit(ID);
     return 0;
 }
+void diffFiles(const char *filename1, const char *filename2, int lineStart, int lineEnd) {
+    FILE *file1 = fopen(filename1, "r");
+    FILE *file2 = fopen(filename2, "r");
+    char line1[4096], line2[4096];
+    int lineCounter = 0 ,is_blank = 1;
+    while (lineCounter < lineStart - 1) {
+        while (fgets(line1, sizeof(line1), file1)!= NULL && is_blank == 1) {
+            is_blank = 1;
+            for (int i = 0; line1[i] != '\0'; i++) {
+                if (line1[i] != ' ' && line1[i] != '\t' && line1[i] != '\n') {
+                    is_blank = 0;
+                    break;
+                }
+            }
+        }
+        while (fgets(line2, sizeof(line2), file2)!= NULL && is_blank == 1) {
+            is_blank = 1;
+            for (int i = 0; line2[i] != '\0'; i++) {
+                if (line2[i] != ' ' && line2[i] != '\t' && line2[i] != '\n') {
+                    is_blank = 0;
+                    break;
+                }
+            }
+        }
+        lineCounter++;
+    }
+    while (lineCounter < lineEnd) {
+        while (fgets(line1, sizeof(line1), file1)!= NULL && is_blank == 1) {
+            is_blank = 1;
+            for (int i = 0; line1[i] != '\0'; i++) {
+                if (line1[i] != ' ' && line1[i] != '\t' && line1[i] != '\n') {
+                    is_blank = 0;
+                    break;
+                }
+            }
+        }
+        while (fgets(line2, sizeof(line2), file2)!= NULL && is_blank == 1) {
+            is_blank = 1;
+            for (int i = 0; line2[i] != '\0'; i++) {
+                if (line2[i] != ' ' && line2[i] != '\t' && line2[i] != '\n') {
+                    is_blank = 0;
+                    break;
+                }
+            }
+        }
+        lineCounter++;
+        char *ptr1 = line1;
+        char *ptr2 = line2;
+        if (strcmp(ptr1, ptr2) != 0) {
+            printf(ANSI_COLOR_RED"%d: %s"ANSI_COLOR_RED, lineCounter, ptr1);
+            printf(ANSI_COLOR_GREEN"%d: %s"ANSI_COLOR_GREEN, lineCounter, ptr2);
+        }
+    }
+    fclose(file1);
+    fclose(file2);
+}
+int run_diff(int argc, char *argv[]){
+    char file1[1024],file2[1024];
+    int lineStart , lineEnd;
+    if(strcmp(argv[2],"-c")==0){
+        sprintf(file1,"%s/COMMIT/commit_%s/", tnt_path, argv[3]);
+        sprintf(file2,"%s/COMMIT/commit_%s/", tnt_path, argv[4]);
+        diffFiles(file1, file2, 0, 4096);
+
+        return 0;
+    }
+    strcpy(file1,argv[3]);
+    strcpy(file2,argv[4]);
+    if(strcmp(argv[5],"line1")==0){
+        sscanf(argv[6], &lineStart);
+        if(strcmp(argv[7],"line2")==0)
+            sscanf(argv[8], &lineEnd);
+    }else{
+        lineStart=0;
+        if(strcmp(argv[5],"line2")==0)
+            sscanf(argv[6], &lineEnd);
+        else
+            lineEnd=1024;
+    }
+    diffFiles(file1, file2, lineStart, lineEnd);
+
+    return 0;
+}
 int main(int argc, char *argv[]) {
     time_t raw_time;
     static struct tm *time_info;
@@ -1355,6 +1434,8 @@ int main(int argc, char *argv[]) {
         return run_branch(argc, argv);
     }else if (strcmp(argv[1], "checkout") == 0) {
         return run_checkout(argc, argv);
+    }else if (strcmp(argv[1], "diff") == 0) {
+        return run_diff(argc, argv);
     }else{
         return Alias(argc, argv);
     }/* else if (strcmp(argv[1], "checkout") == 0) {
