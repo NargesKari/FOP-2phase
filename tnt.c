@@ -44,9 +44,10 @@ int manage_reset_mode(int argc, char * const argv[]);
 int run_reset(char * str);
 int reset_by_time(long line_numb);
 int run_status(int argc, char * const argv[]);
+void saveLastModifiedTime(char *filename,char* time);
 int run_commit(int argc, char * const argv[]);
 void current_name_email(char name[], char email[]);
-void get_data();
+void get_data(int mode);
 int count_changed_files();
 int save_commit();
 int check_stage(int *ID, int *status, char *path);
@@ -320,19 +321,19 @@ int manage_add_mode(int argc, char * const argv[]){
             }
         }
     }else if(strcmp(argv[2], "-f")==0) {
-        if(argc < 4 ) fprintf(stdout, "please enter a valid command\n");
+        if(argc < 4 ) printf( "please enter a valid command\n");
         for (int i = 3; i < argc; i++) {
             run_add(argv[i]);
         }return 0;
     }else if(strcmp(argv[2], "-n") == 0){
         if(argc < 4 ){
-            fprintf(stdout, "please enter a valid command\n");
+            printf("please enter a valid command\n");
             return 1;
         }
         char *check;
         long depth= strtol(argv[3], &check,10);
         if( *check != '\0' || depth < 1){
-            fprintf(stdout, "please enter a valid command\n");
+            printf( "please enter a valid command\n");
             return 1;
         }
         exploreDirectory(cwd, depth);
@@ -661,45 +662,97 @@ int compareTimes(const char *timeStr1, const char *timeStr2){
     else if (time1 > time2) return 1;
     return 0;
 }
-//int compareFileContents(const char *filePath1, const char *filePath2) {
-//    FILE *file1, *file2;
-//    char ch1, ch2;
-//    int areEqual = 1;
-//    file1 = fopen(filePath1, "rb");
-//    if (!file1) {
-//        perror("خطا در باز کردن فایل اول");
-//        return -1;
-//    }
-//    file2 = fopen(filePath2, "rb");
-//    if (!file2) {
-//        perror("خطا در باز کردن فایل دوم");
-//        fclose(file1);
-//        return -1;
-//    }
-//    do {
-//        ch1 = fgetc(file1);
-//        ch2 = fgetc(file2);
-//        // مقایسه بایت‌ها
-//        if (ch1 != ch2) {
-//            areEqual = 0;
-//            break;
-//        }
-//    } while (ch1 != EOF && ch2 != EOF);
-//    if (ch1 != EOF || ch2 != EOF) {
-//        areEqual = 0;
-//    }
-//    fclose(file1);
-//    fclose(file2);
-//    if (areEqual) {
-//        printf("محتوای فایل‌ها یکسان است.\n");
-//        return 1;
-//    } else
-//        return 0;
-//}
 int run_status(int argc, char * const argv[]){
-    printf("khikhikhi\n");
+    get_data(0);
+    char last_commit_path[4096],copy_path[40976],line[256],last_time[256];
+    sprintf(last_commit_path,"%s/COMMIT/commit_%d/detail",tnt_path, Last_ID);
+    sprintf(copy_path,"%s/copy",tnt_path);
+    copyFile(last_commit_path,copy_path);
+    FILE *commits = fopen(commits_path,"r");
+    while(fgets(line, sizeof(line), commits) != NULL){
+        if(strstr(line, "Date & Time:") != NULL){
+            sscanf(line, "Date & Time:%s", last_time);
+        }
+    }
+    fclose(commits);
+    int a,b,check;
+    DIR *dir = opendir(".");
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type != DT_DIR){
+            check=0;
+            char path[2048];
+            sprintf(path, "%s/%s", cwd, entry->d_name);
+            commits=fopen(last_commit_path,"r");
+            while(fgets(line, sizeof(line), commits) != NULL){
+                if(strstr(line, path) != NULL){
+                    check=1;
+                    char time[128];
+                    saveLastModifiedTime(path,time);
+                    if(compareTimes(time,last_time)>0){
+                        if(check_stage(&a,&b,path)) printf("%s: +M\n", entry->d_name);
+                        else printf("%s: -M\n", entry->d_name);
+                    }
+                    delete_from_file(path, copy_path);
+                }
+            }if(!check){
+                if(check_stage(&a,&b,path)) printf("%s: +A\n", entry->d_name);
+                else printf("%s: -A\n", entry->d_name);
+            }
+            fclose(commits);
+
+        }
+    }
+    FILE *copy= fopen(copy_path,"r");
+    while (fgets(line, sizeof(line), copy) != NULL){
+        if(strstr(line,cwd) != NULL){
+            char path[1024],name[512];
+            sscanf(line, "PATH:%s", path);
+            sscanf(strstr(line,cwd)+ strlen(cwd)+1, "%s", name);
+            if(check_stage(&a,&b,path)) printf("%s: +D\n", name);
+            else printf("%s: -D\n", name);
+        }
+    }
+    remove(copy_path);
     return 0;
 }
+int all_status(char *path, int depth){
+    char command[512];
+    sprintf(command,"tnt reset");
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        return 1;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            char new_path[1024];
+            snprintf(new_path, sizeof(new_path), "%s/%s", path, entry->d_name);
+            for (int i = 0; i < depth; i++) {
+                printf("  ");
+            }
+            chdir(path);
+            system(command);
+//            printf("|-- %s\n", entry->d_name);
+            if (entry->d_type == DT_DIR) {
+                all_status(new_path, depth + 1);
+            }
+        }
+    }
+    closedir(dir);
+    return 0;
+}
+void saveLastModifiedTime(char *filename,char* time) {
+    struct stat fileStat;
+    if (stat(filename, &fileStat) == -1) {
+        return;
+    }
+    struct tm *modifiedTime = localtime(&fileStat.st_mtime);
+    char formattedTime[20];
+    strftime(formattedTime, sizeof(formattedTime), "%Y-%m-%d/%H:%M:%S", modifiedTime);
+    strcpy(time,formattedTime);
+}
+
 int run_commit(int argc, char * const argv[]){
     if(argc < 3 ){
         fprintf(stdout, "please enter a valid command\n");
@@ -754,7 +807,7 @@ int run_commit(int argc, char * const argv[]){
     }
     int count= count_changed_files();
     if(count==0) return 1;
-    get_data(); //ID,Branch,...
+    get_data(1); //ID,Branch,...
     make_space(message,72);
     FILE *branches;
     if((branches = fopen(branches_path,"r+"))==NULL){
@@ -948,7 +1001,7 @@ void current_name_email(char *name, char *email){
         else strcpy(email,local_email);
     }
 }
-void get_data(){
+void get_data(int mode){
     FILE *config;
     int line_numb=1;
     char line[256];
@@ -964,12 +1017,15 @@ void get_data(){
     fclose(config);
     config=fopen(config_path, "r+");
     line_numb=1;
-    Last_ID++;
-    while (fgets(line, sizeof(line), config) != NULL && line_numb<9){
-        if(line_numb == 5) fprintf(config, "last commit ID:%d", Last_ID );
-        if(line_numb == 6) fprintf(config, "current commit ID:%d", Last_ID);
-        line_numb++;
+    if(mode){
+        Last_ID++;
+        while (fgets(line, sizeof(line), config) != NULL && line_numb<9){
+            if(line_numb == 5) fprintf(config, "last commit ID:%d", Last_ID );
+            if(line_numb == 6) fprintf(config, "current commit ID:%d", Last_ID);
+            line_numb++;
+        }
     }
+
 }
 int set_shortcut(int argc, char *argv[]){
     if(argc != 6 || strcmp(argv[2],"-m")!=0 || strcmp(argv[4],"-s")!=0 ){
@@ -1015,6 +1071,249 @@ int remove_shortcut(int argc, char *argv[]){
     delete_from_file(line, shortcuts_path);
     return 0;
 }
+void copyLast7Lines(char *output) {
+    FILE *inputFile;
+    FILE *outputFile = fopen(output, "w");
+    int count ,count2;
+    count = Last_ID*7;
+    char line[3000];
+    for(int i=0; i<Last_ID; i++){
+        count-=7;
+        inputFile = fopen(commits_path, "r");
+        count2=1;
+        if(count>0){
+            while(fgets(line,3000,inputFile)!=NULL && count2<count){
+                count2++;
+            }
+        }
+        for(int j=0; j<7; j++){
+            fgets(line,3000,inputFile);
+            fputs(line,outputFile);
+        }
+        fputs("\n",outputFile);
+        fclose(inputFile);
+    }
+    fclose(outputFile);
+}
+int run_log(int argc, char *argv[]){
+    char copy_path[2048] , line[1024];
+    get_data(0);
+    sprintf(copy_path,"%s/copy",tnt_path);
+    copyLast7Lines(copy_path);
+    FILE *copy=fopen(copy_path,"r");
+    if(argc==2){
+        while(fgets(line, sizeof(line),copy)!=NULL){
+            printf("%s",line);
+        }
+    }else if(strcmp(argv[2],"-n")==0){
+        char *check;
+        long n= strtol(argv[3], &check,10);
+        if( *check != '\0' || n < 1){
+            printf( "please enter a valid command\n");
+            return 1;
+        }n*=8;
+        while(fgets(line, sizeof(line),copy)!=NULL && n>0){
+            printf("%s",line);
+            n--;
+        }
+    }else if(strcmp(argv[2],"-branch")==0){
+        int check = 1;
+        FILE *branches = fopen(branches_path, "r");
+        while (fgets(line, sizeof(line), branches) != NULL) {
+            if (strstr(line, argv[3]) != NULL) {
+                check = 0;
+                break;
+            }
+        }
+        fclose(branches);
+        if (check) {
+            printf("invalid branch name!\n");
+            return 1;
+        }
+        char branch_name[100];
+        sprintf(branch_name, "Branch:%s", argv[3]);
+        strcat(branch_name,"\n");
+        int n = 0, commits_id[Last_ID], counter = -1;
+        FILE *commits = fopen(commits_path, "r");
+        while (fgets(line, sizeof(line), commits) != NULL) {
+            if (strstr(line, "ID:") != NULL) counter++;
+            if (strcmp(line, branch_name) == 0) {
+                commits_id[n] = Last_ID - counter;
+                n++;
+            }
+        }
+        fclose(commits);
+        for(int i=1; i<=Last_ID; i++){
+            for (int j = 0; j <= 7; j++) {
+               fgets(line, sizeof(line), copy);
+               if(i==commits_id[n-1]){
+                   printf("%s", line);
+               }
+            }if(i==commits_id[n-1]) n--;
+        }
+    }else if(strcmp(argv[2],"-author")==0){
+        char user_name[100];
+        sprintf(user_name, "User.mame:%s ", argv[3]);
+        int n = 0, commits_id[Last_ID], counter = -1;
+        FILE *commits = fopen(commits_path, "r");
+        while (fgets(line, sizeof(line), commits) != NULL) {
+            if (strstr(line, "ID:") != NULL) counter++;
+            if (strstr(line, user_name) != NULL) {
+                commits_id[n] = Last_ID - counter;
+                n++;
+            }
+        }
+        fclose(commits);
+        for(int i=1; i<=Last_ID; i++){
+            for (int j = 0; j <= 7; j++) {
+                fgets(line, sizeof(line), copy);
+                if(i==commits_id[n-1]){
+                    printf("%s", line);
+                }
+            }if(i==commits_id[n-1]) n--;
+        }
+    }else if(strcmp(argv[2],"-since")==0){
+        int commits_id, counter = 0;
+        FILE *commits = fopen(commits_path, "r");
+        while (fgets(line, sizeof(line), commits) != NULL) {
+            if (strstr(line, "ID:") != NULL) counter++;
+            if (strstr(line, argv[3]) != NULL) {
+                commits_id = Last_ID - counter;
+                printf("%d",commits_id);
+                break;
+            }
+        }
+        fclose(commits);
+        for(int i=0; i<Last_ID; i++){
+            for (int j = 0; j <= 7; j++) {
+                fgets(line, sizeof(line), copy);
+                if(i<=commits_id) printf("%s", line);
+            }
+        }
+    }else if(strcmp(argv[2],"-before")==0){
+        int commits_id, counter = 0;
+        FILE *commits = fopen(commits_path, "r");
+        while (fgets(line, sizeof(line), commits) != NULL) {
+            if (strstr(line, "ID:") != NULL) counter++;
+            if (strstr(line, argv[3]) != NULL) {
+                commits_id = Last_ID - counter;
+            }
+        }
+        fclose(commits);
+        for(int i=0; i<Last_ID; i++){
+            for (int j = 0; j <= 7; j++) {
+                fgets(line, sizeof(line), copy);
+                if(i>=commits_id) printf("%s", line);
+            }
+        }
+    }else if(strcmp(argv[2],"-search")==0){
+        int n = 0, commits_id[Last_ID], counter = -1;
+        FILE *commits = fopen(commits_path, "r");
+        while (fgets(line, sizeof(line), commits) != NULL) {
+            if (strstr(line, "ID:") != NULL) counter++;
+            if (strstr(line, argv[3]) != NULL && strstr(line, "Message:") != NULL) {
+                commits_id[n] = Last_ID - counter;
+                n++;
+            }
+        }
+        fclose(commits);
+        for(int i=1; i<=Last_ID; i++){
+            for (int j = 0; j <= 7; j++) {
+                fgets(line, sizeof(line), copy);
+                if(i==commits_id[n-1]){
+                    printf("%s", line);
+                }
+            }if(i==commits_id[n-1]) n--;
+        }
+    }else{
+        printf( "please enter a valid command\n");
+    }
+    fclose(copy);
+    return 0;
+}
+int run_branch(int argc, char *argv[]){
+    if (argc==3){
+        FILE *branch=fopen(branches_path,"a+");
+        char line[256],name[128];
+        sprintf(name,"%s:",argv[2]);
+        while (fgets(line, sizeof(line), branch) != NULL){
+            if(strstr(line,name)!=NULL){
+                printf("This branch name already exists\n");
+                return 1;
+            }
+        }
+        get_data(0);
+        sprintf(name, "%s:%d", argv[2], Last_ID);
+        make_space(name,100);
+        strcat(name,"\n");
+        fputs(name, branch);
+        fclose(branch);
+    }else if(argc==2){
+        FILE *branch=fopen(branches_path,"r");
+        char line[256];
+        while (fgets(line, sizeof(line), branch) != NULL){
+            printf("%s",line);
+        }
+        fclose(branch);
+    }else{
+        printf( "please enter a valid command\n");
+        return 1;
+    }
+    return 0;
+}
+void checkout_commit(long ID){
+    char commit_path[4096], line[2048];
+    char sor_path[10000], des_path[4096],code[2048],version[2048];
+    sprintf(commit_path,"%s/COMMIT/commit_%ld/detail",tnt_path, ID);
+    FILE *detail= fopen(commit_path,"r");
+    while (fgets(line, sizeof(line), detail) != NULL){
+        sscanf(line,"PATH:%s",des_path);
+        fgets(line, sizeof(line), detail);
+        sscanf(line,"CODE:%s",code);
+        fgets(line, sizeof(line), detail);
+        sscanf(line,"VERSION:%s",version);
+        if(version[0]=='0'){
+            remove(des_path);
+        }else{
+            sprintf(sor_path,"%s/COMMIT/commit_%s/%s", tnt_path, version, code);
+            copyFile(sor_path,des_path);
+        }
+
+    }
+    fclose(detail);
+}
+int run_checkout(int argc, char *argv[]){
+    get_data(0);
+    long ID;
+    if(strstr(argv[2],"HEAD") != NULL){
+        if(strcmp(argv[2],"HEAD")==0)  ID=Last_ID;
+        else{
+            int n;
+            sscanf(argv[2],"HEAD-%d",&n);
+            ID=Last_ID-n;
+        }
+    }else{
+        char *branch;
+        ID = strtol(argv[2], &branch,10);
+        if( branch[0] != '\0'){
+            char line[1024];
+            FILE *branches = fopen(branches_path, "r");
+            while (fgets(line, sizeof(line), branches) != NULL) {
+                if (strstr(line, argv[3]) != NULL) {
+                    sscanf(strstr(line, ":")+1, "%ld", &ID);
+                    break;
+                }
+            }
+        }else{
+            if(count_changed_files()){
+                printf("You have uncommitted changes\n");
+                return 1;
+            }
+        }
+    }
+    checkout_commit(ID);
+    return 0;
+}
 int main(int argc, char *argv[]) {
     time_t raw_time;
     static struct tm *time_info;
@@ -1023,7 +1322,7 @@ int main(int argc, char *argv[]) {
     strftime(Time, sizeof(Time), "%Y-%m-%d/%H:%M:%S", time_info);
 
     if (argc < 2) {
-        fprintf(stdout, "please enter a valid command");
+        printf( "please enter a valid command\n");
         return 1;
     }
     if (getcwd(cwd, sizeof(cwd)) == NULL) return 1;
@@ -1036,10 +1335,12 @@ int main(int argc, char *argv[]) {
         return 1;
     }else if (strcmp(argv[1], "add") == 0){
         return manage_add_mode(argc, argv);
-    } else if (strcmp(argv[1], "reset") == 0) {
+    }else if (strcmp(argv[1], "reset") == 0) {
         return manage_reset_mode(argc, argv);
-    } else if (strcmp(argv[1], "status") == 0) {
+    }else if (strcmp(argv[1], "status") == 0) {
         return run_status(argc, argv);
+    }else if (strcmp(argv[1], "status-a") == 0) {
+        return all_status(cwd,0);
     }else if (strcmp(argv[1], "commit") == 0) {
         return run_commit(argc, argv);
     }else if (strcmp(argv[1], "set") == 0) {
@@ -1048,11 +1349,16 @@ int main(int argc, char *argv[]) {
         return replace_shortcut(argc, argv);
     }else if (strcmp(argv[1], "remove") == 0) {
         return remove_shortcut(argc, argv);
+    }else if (strcmp(argv[1], "log") == 0) {
+        return run_log(argc, argv);
+    }else if (strcmp(argv[1], "branch") == 0) {
+        return run_branch(argc, argv);
+    }else if (strcmp(argv[1], "checkout") == 0) {
+        return run_checkout(argc, argv);
     }else{
         return Alias(argc, argv);
     }/* else if (strcmp(argv[1], "checkout") == 0) {
         return run_checkout(argc, argv);
     }*/
-
     return 0;
 }
