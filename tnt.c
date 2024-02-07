@@ -7,8 +7,15 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <pwd.h>
+
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_YELLOW  "\x1b[33m"
+#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+
 char cwd[1024];
 char tnt_path[1024];
 char Time[100];
@@ -20,7 +27,7 @@ char shortcuts_path[2048];
 char branches_path[2048];
 int Last_ID, Current_ID;
 char Branch[256];
-//void print_command(int argc, char * const argv[]);
+
 int compareTimes(const char *timeStr1, const char *timeStr2);
 int run_init(int argc, char * const argv[]);
 int create_configs();
@@ -52,16 +59,7 @@ void clear_stage();
 int set_shortcut(int argc, char *argv[]);
 int replace_shortcut(int argc, char *argv[]);
 int remove_shortcut(int argc, char *argv[]);
-//int inc_last_commit_ID();
-//bool check_file_directory_exists(char *filepath);
-//int commit_staged_file(int commit_ID, char *filepath);
-//int track_file(char *filepath);
-//bool is_tracked(char *filepath);
-//int create_commit_file(int commit_ID, char *message);
-//int find_file_last_commit(char* filepath);
-//int run_checkout(int argc, char *const argv[]);
-//int find_file_last_change_before_commit(char *filepath, int commit_ID);
-//int checkout_file(char *filepath, int commit_ID);
+
 int find_tnt(){
     char tmp_cwd[1024];
     struct dirent *entry;
@@ -103,25 +101,26 @@ int run_init(int argc, char * const argv[]) {
         if (chdir(".tnt") != 0) return 1;
         getcwd(tnt_path, sizeof(tnt_path));
         return create_configs();
-    } else perror("tnt repository has already initialized\n");
+    } else{
+        printf(ANSI_COLOR_RED "tnt repository has already initialized\n" ANSI_COLOR_RESET );
+        return 1;
+    }
     return 0;
 }
 int create_configs(){
     char Name[256],Date_Time[256],Email[256],last_ID[256],current_ID[256],branch[256];
     strcpy(Name,"user name:");
-    make_space(Name,100);
+    make_space(Name,200);
     strcpy(Date_Time,"date and time:");
     make_space(Date_Time,100);
     strcpy(Email,"user email:");
-    make_space(Email,100);
+    make_space(Email,200);
     strcpy(last_ID,"last commit ID:0");
     make_space(last_ID,100);
     strcpy(current_ID,"current commit ID:0");
     make_space(current_ID,100);
     strcpy(branch,"Branch:master");
     make_space(branch,100);
-    char space[40];
-    strcpy(space,"                                   ");
     FILE *file;
     struct passwd *pw = getpwuid(getuid());
     if (chdir(pw->pw_dir) != 0) return 1;   //go to user folder
@@ -158,17 +157,17 @@ int create_configs(){
 int run_config(int argc, char * const argv[]){
     char Name[256],Date_Time[256],Email[256];
     strcpy(Name,"user name:");
-    make_space(Name,100);
+    make_space(Name,200);
     strcpy(Date_Time,"date and time:");
     make_space(Date_Time,100);
     strcpy(Email,"user email:");
-    make_space(Email,100);
+    make_space(Email,200);
     int m=0;
     FILE *file;
     char buffer[512];
     char data[256];
     if(argc < 3 ){
-        fprintf(stdout, "please enter a valid command\n");
+        printf( ANSI_COLOR_CYAN"please enter a valid command\n"ANSI_COLOR_RESET);
         return 1;
     } if(strcmp(argv[2], "-global") == 0) {
         m = 1;
@@ -181,26 +180,27 @@ int run_config(int argc, char * const argv[]){
         }
     }else {
         if (find_tnt() == 1 || tnt_path[0] == 0) {
-            fprintf(stdout, "There is not any repository\n");
+            printf( "There is not any repository\n");
             return 1;
         }
         if (chdir(tnt_path) != 0) return 1;
     }
     if(argc < 3+m ){
-        fprintf(stdout, "please enter a valid command\n");
+        printf( "please enter a valid command\n");
         return 1;
     }
     if(strcmp(argv[2+m], "user.name") == 0){
         if(m) file = fopen(".tnt_global_configs","r+");
         else if((file = fopen("config","r+")) == NULL) return 1;
         if(argc < 4+m ){
-            fprintf(stdout, "please enter a valid command\n");
+            printf( "please enter a valid command\n");
             return 1;
         }if(strlen(argv[3+m])>30 || argc > 4+m){
-            fprintf(stdout, "Your username can has a maximum of 30 characters without space\n");
+            printf( "Your username can has a maximum of 30 characters without space\n");
             return 1;
         }
         sprintf(data, "user name:%s ", argv[3+m]);
+        make_space(data,200);
         fputs( data, file);
         if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
         sprintf(data, "date and time:%s ", Time);
@@ -210,15 +210,16 @@ int run_config(int argc, char * const argv[]){
         if(m) file = fopen(".tnt_global_configs","r+");
         else if((file = fopen("config","r+")) == NULL) return 1;
         if (argc < 4+m) {
-            fprintf(stdout, "please enter a valid command\n");
+            printf( "please enter a valid command\n");
             return 1;
         }if (strlen(argv[3+m]) > 30 || argc > 4+m) {
-            fprintf(stdout, "Your email can has a maximum of 30 characters without space\n");
+            printf( "Your email can has a maximum of 30 characters without space\n");
             return 1;
         }
         if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
         if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
         sprintf(data, "user email:%s ", argv[3+m]);
+        make_space(data,200);
         fputs(data, file);
         if (fgets(buffer, sizeof(buffer), file) == NULL) return 1;
         sprintf(data, "date and time:%s ", Time);
@@ -226,7 +227,7 @@ int run_config(int argc, char * const argv[]){
         fclose(file);
     }else if(strncmp(argv[2+m], "alias.",6) == 0){
         char command[256];
-//        if(!check_command(argv[3+m])){      or: if(system(argv[3+m])!=0)
+//        if(!check_command(argv[3+m])){
 //            printf("%s\n",argv[3+m]);
 //            return 1;
 //        }
@@ -386,13 +387,13 @@ void run_add(char * path){
         DIR *dir = opendir(path);
         struct dirent *entry;
         while ((entry = readdir(dir)) != NULL) {
+            strcpy(path1,"");
+            sprintf(path1,"%s/%s",path,entry->d_name);
             if (entry->d_type != DT_DIR){
-                strcpy(path1,"");
-                sprintf(path1,"%s/%s",path,entry->d_name);
                 if(add_to_tracking(path1)) return;
                 add_to_staging(path1, 1);
-                delete_from_file(path1,tracks_copy);
             }
+            delete_from_file(path1,tracks_copy);
         }while (fscanf(file, "%s", buffer) == 1) {
             if (strstr(buffer, path) != NULL || strstr(buffer, "STATUS:0") != NULL) {
                 add_to_staging(buffer,2);
@@ -492,7 +493,7 @@ bool matchWildcard(const char *word, const char *pattern) {
 }
 int manage_reset_mode(int argc, char * const argv[]){
     if(argc < 3 ){
-        fprintf(stdout, "please enter a valid command\n");
+        printf("please enter a valid command\n");
         return 1;
     }else if( strstr(argv[2],"*")!= NULL){
         DIR *dir = opendir(".");
@@ -505,7 +506,7 @@ int manage_reset_mode(int argc, char * const argv[]){
             }
         }
     }else if(strcmp(argv[2], "-f")==0) {
-        if(argc < 4 ) fprintf(stdout, "please enter a valid command\n");
+        if(argc < 4 ) printf( "please enter a valid command\n");
         for (int i = 3; i < argc; i++) {
             run_reset(argv[i]);
         }return 0;
@@ -515,13 +516,13 @@ int manage_reset_mode(int argc, char * const argv[]){
     }else if(strcmp(argv[2], "-undo") == 0){
         long count_line=0;
         if(argc < 4 ){
-            fprintf(stdout, "please enter a valid command\n");
+            printf("please enter a valid command\n");
             return 1;
         }
         char *check;
         long numb= strtol(argv[3], &check,10);
         if( *check != '\0' || numb< 1){
-            fprintf(stdout, "please enter a valid command\n");
+            printf( "please enter a valid command\n");
             return 1;
         }
         FILE *history;
@@ -536,7 +537,7 @@ int manage_reset_mode(int argc, char * const argv[]){
             line_numb-=5;
         }
     }else{
-        fprintf(stdout, "please enter a valid command\n");
+        printf( "please enter a valid command\n");
         return 1;
     }
     return 0;
@@ -636,34 +637,44 @@ int Alias(int argc, char *argv[]){
     return 0;
 }
 int compareTimes(const char *timeStr1, const char *timeStr2){
-    struct tm tm1, tm2;
-    time_t time1, time2;
-    if (sscanf(timeStr1, "%d-%d-%d/%d:%d:%d",
-               &tm1.tm_year, &tm1.tm_mon, &tm1.tm_mday,
-               &tm1.tm_hour, &tm1.tm_min, &tm1.tm_sec) != 6) {
+    struct tm time1_tm, time2_tm;
+    int year1, month1, day1, hour1, min1, sec1;
+    sscanf(timeStr1, "%d-%d-%d/%d:%d:%d", &year1, &month1, &day1, &hour1, &min1, &sec1);
+    time1_tm.tm_year = year1 - 1900;
+    time1_tm.tm_mon = month1 - 1;
+    time1_tm.tm_mday = day1;
+    time1_tm.tm_hour = hour1;
+    time1_tm.tm_min = min1;
+    time1_tm.tm_sec = sec1;
+
+    int year2, month2, day2, hour2, min2, sec2;
+    sscanf(timeStr2, "%d-%d-%d/%d:%d:%d", &year2, &month2, &day2, &hour2, &min2, &sec2);
+    time2_tm.tm_year = year2 - 1900;
+    time2_tm.tm_mon = month2 - 1;
+    time2_tm.tm_mday = day2;
+    time2_tm.tm_hour = hour2;
+    time2_tm.tm_min = min2;
+    time2_tm.tm_sec = sec2;
+
+    time_t time1 = mktime(&time1_tm);
+    time_t time2 = mktime(&time2_tm);
+
+    if (difftime(time1, time2) > 0) {
+        return 1;
+    } else {
         return 0;
     }
-    if (sscanf(timeStr2, "%d-%d-%d/%d:%d:%d",
-               &tm2.tm_year, &tm2.tm_mon, &tm2.tm_mday,
-               &tm2.tm_hour, &tm2.tm_min, &tm2.tm_sec) != 6) {
-        return 0;
-    }
-    tm1.tm_year -= 2000;
-    tm1.tm_mon -= 1;
-    tm2.tm_year -= 2000;
-    tm2.tm_mon -= 1;
-    time1 = mktime(&tm1);
-    time2 = mktime(&tm2);
-    if (time1 < time2) return -1;
-    else if (time1 > time2) return 1;
-    return 0;
 }
 int run_status(int argc, char * const argv[]){
     get_data(0);
-    char last_commit_path[4096],copy_path[40976],line[256],last_time[256];
-    sprintf(last_commit_path,"%s/COMMIT/commit_%d/detail",tnt_path, Last_ID);
+    if(Current_ID==0){
+        printf("You dont have any commit\n");
+        return 1;
+    }
+    char commit_path[4096],copy_path[40976],line[256],last_time[256];
+    sprintf(commit_path,"%s/COMMIT/commit_%d/detail",tnt_path, Current_ID);
     sprintf(copy_path,"%s/copy",tnt_path);
-    copyFile(last_commit_path,copy_path);
+    copyFile(commit_path,copy_path);
     FILE *commits = fopen(commits_path,"r");
     while(fgets(line, sizeof(line), commits) != NULL){
         if(strstr(line, "Date & Time:") != NULL){
@@ -679,7 +690,7 @@ int run_status(int argc, char * const argv[]){
             check=0;
             char path[2048];
             sprintf(path, "%s/%s", cwd, entry->d_name);
-            commits=fopen(last_commit_path,"r");
+            commits=fopen(commit_path,"r");
             while(fgets(line, sizeof(line), commits) != NULL){
                 if(strstr(line, path) != NULL){
                     check=1;
@@ -705,31 +716,28 @@ int run_status(int argc, char * const argv[]){
             char path[1024],name[512];
             sscanf(line, "PATH:%s", path);
             sscanf(strstr(line,cwd)+ strlen(cwd)+1, "%s", name);
-            if(check_stage(&a,&b,path)) printf("%s: +D\n", name);
-            else printf("%s: -D\n", name);
+            if(strstr(name,"/")==NULL){
+                if(check_stage(&a,&b,path)) printf("%s: +D\n", name);
+                else printf("%s: -D\n", name);
+            }
         }
     }
     remove(copy_path);
     return 0;
 }
 int all_status(char *path, int depth){
-    char command[512];
-    sprintf(command,"tnt reset");
     DIR *dir = opendir(path);
     if (dir == NULL) {
         return 1;
     }
+    chdir(path);
+    system("pwd");
+    system("tnt status");
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+        if (strncmp(entry->d_name, ".",1) != 0 && strncmp(entry->d_name, "..",2) != 0) {
             char new_path[1024];
             snprintf(new_path, sizeof(new_path), "%s/%s", path, entry->d_name);
-            for (int i = 0; i < depth; i++) {
-                printf("  ");
-            }
-            chdir(path);
-            system(command);
-//            printf("|-- %s\n", entry->d_name);
             if (entry->d_type == DT_DIR) {
                 all_status(new_path, depth + 1);
             }
@@ -833,7 +841,7 @@ int run_commit(int argc, char * const argv[]){
             Last_ID, message, Time, name, email, Branch, count);
     fclose(commits);
     save_commit();
-    printf(" COMMIT ID: %d\n Message: %s\n DATE & TIME: %s\n", Last_ID, message,Time);
+    printf(ANSI_COLOR_BLUE" COMMIT ID: %d\n Message: %s\n DATE & TIME: %s\n"ANSI_COLOR_RESET, Last_ID, message,Time);
     return 0;
 }
 int save_commit(){
@@ -1040,6 +1048,7 @@ int replace_shortcut(int argc, char *argv[]){
         printf( "please enter a valid command\n");
         return 1;
     }
+    int check=1;
     FILE *shortcuts=fopen(shortcuts_path,"r+");
     char line[1024],name[512], message[128];
     strcpy(message, argv[3]);
@@ -1047,11 +1056,16 @@ int replace_shortcut(int argc, char *argv[]){
     sprintf(name,"Name:%s ",argv[5]);
     while (fgets(line, sizeof(line), shortcuts) != NULL ){
         if(strstr(line,name) != NULL){
+            check=0;
             long offset = ftell(shortcuts);
             fseek(shortcuts, offset-strlen(line), SEEK_SET);
             fprintf(shortcuts, "Name:%s Message:%s\n",argv[5],message);
             return 0;
         }
+    }
+    if(check){
+        printf("shortcut didnt found!\n");
+        return 1;
     }
     return 0;
 }
@@ -1060,11 +1074,26 @@ int remove_shortcut(int argc, char *argv[]){
         printf( "please enter a valid command\n");
         return 1;
     }
-    char line[1024], message[128];
-    strcpy(message, argv[3]);
-    make_space(message,72);
-    sprintf(line, "Name:%s Message:%s\n",argv[5],message);
-    delete_from_file(line, shortcuts_path);
+    char line[512];
+    int check=1;
+    FILE *shortcuts=fopen(shortcuts_path,"r+");
+    char name[512];
+    sprintf(name,"Name:%s ",argv[3]);
+    while (fgets(line, sizeof(line), shortcuts) != NULL ){
+        if(strstr(line,name) != NULL) {
+            check=0;
+            long offset = ftell(shortcuts);
+            fseek(shortcuts, offset-strlen(line), SEEK_SET);
+            for(int i=0; i< strlen(line); i++) {
+                fputs(" ", shortcuts);
+            }
+        }
+    }
+    fclose(shortcuts);
+    if(check){
+        printf("shortcut didnt found!\n");
+        return 1;
+    }
     return 0;
 }
 void copyLast7Lines(char *output) {
@@ -1205,22 +1234,38 @@ int run_log(int argc, char *argv[]){
     }else if(strcmp(argv[2],"-search")==0){
         int n = 0, commits_id[Last_ID], counter = -1;
         FILE *commits = fopen(commits_path, "r");
-        while (fgets(line, sizeof(line), commits) != NULL) {
-            if (strstr(line, "ID:") != NULL) counter++;
-            if (strstr(line, argv[3]) != NULL && strstr(line, "Message:") != NULL) {
-                commits_id[n] = Last_ID - counter;
-                n++;
+        if( strstr(argv[2],"*")!= NULL){
+            char *word ;
+            while (fgets(line, sizeof(line), commits) != NULL) {
+                if(strstr(line,"Message:")!=NULL){
+                    word = strtok(strstr(line,":")+1," \n");
+                    while(word!=NULL){
+                        if (matchWildcard(word, argv[2])){
+                            char command[512];
+                            sprintf(command,"tnt log -search %s",word);
+                        }
+                        word = strtok(NULL," \n");
+                    }
+                }
+            }
+        } else{
+            while (fgets(line, sizeof(line), commits) != NULL) {
+                if (strstr(line, "ID:") != NULL) counter++;
+                if (strstr(line, argv[3]) != NULL && strstr(line, "Message:") != NULL) {
+                    commits_id[n] = Last_ID - counter;
+                    n++;
+                }
+            }
+            for(int i=1; i<=Last_ID; i++){
+                for (int j = 0; j <= 7; j++) {
+                    fgets(line, sizeof(line), copy);
+                    if(i==commits_id[n-1]){
+                        printf("%s", line);
+                    }
+                }if(i==commits_id[n-1]) n--;
             }
         }
         fclose(commits);
-        for(int i=1; i<=Last_ID; i++){
-            for (int j = 0; j <= 7; j++) {
-                fgets(line, sizeof(line), copy);
-                if(i==commits_id[n-1]){
-                    printf("%s", line);
-                }
-            }if(i==commits_id[n-1]) n--;
-        }
     }else{
         printf( "please enter a valid command\n");
     }
@@ -1244,6 +1289,14 @@ int run_branch(int argc, char *argv[]){
         strcat(name,"\n");
         fputs(name, branch);
         fclose(branch);
+        sprintf(name, "Branch:%s", argv[2]);
+        make_space(name,100);
+        FILE *config=fopen(config_path, "r+");
+        int line_numb=1;
+        while (fgets(line, sizeof(line), config) != NULL && line_numb<9){
+            if(line_numb ==7 ) fprintf(config, "%s", name);
+            line_numb++;
+        }fclose(config);
     }else if(argc==2){
         FILE *branch=fopen(branches_path,"r");
         char line[256];
@@ -1280,6 +1333,10 @@ void checkout_commit(long ID){
 }
 int run_checkout(int argc, char *argv[]){
     get_data(0);
+    if(count_changed_files()){
+        printf("You have uncommitted changes\n");
+        return 1;
+    }
     long ID;
     if(strstr(argv[2],"HEAD") != NULL){
         if(strcmp(argv[2],"HEAD")==0)  ID=Last_ID;
@@ -1300,94 +1357,97 @@ int run_checkout(int argc, char *argv[]){
                     break;
                 }
             }
-        }else{
-            if(count_changed_files()){
-                printf("You have uncommitted changes\n");
-                return 1;
-            }
         }
     }
     checkout_commit(ID);
     return 0;
 }
+bool NonSpace(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (str[i] != ' ' && str[i] != '\n' && str[i] != '\t') {
+            return true;
+        }
+    }
+    return false;
+}
 void diffFiles(const char *filename1, const char *filename2, int lineStart, int lineEnd) {
     FILE *file1 = fopen(filename1, "r");
     FILE *file2 = fopen(filename2, "r");
+    if(file1==NULL || file2==NULL){
+        if(file1==NULL) printf("%s doesn't exist\n",filename1);
+        if(file2==NULL) printf("%s doesn't exist\n",filename2);
+            return;
+    }
     char line1[4096], line2[4096];
-    int lineCounter = 0 ,is_blank = 1;
-    while (lineCounter < lineStart - 1) {
-        while (fgets(line1, sizeof(line1), file1)!= NULL && is_blank == 1) {
-            is_blank = 1;
-            for (int i = 0; line1[i] != '\0'; i++) {
-                if (line1[i] != ' ' && line1[i] != '\t' && line1[i] != '\n') {
-                    is_blank = 0;
-                    break;
-                }
-            }
+    int check1=1,check2=1;
+    int lineCounter = 0;
+    while (lineCounter < lineStart-1) {
+        while(check1 && !NonSpace(line1)){
+            if(fgets(line1, sizeof(line1), file1) == NULL) check1=0;
         }
-        while (fgets(line2, sizeof(line2), file2)!= NULL && is_blank == 1) {
-            is_blank = 1;
-            for (int i = 0; line2[i] != '\0'; i++) {
-                if (line2[i] != ' ' && line2[i] != '\t' && line2[i] != '\n') {
-                    is_blank = 0;
-                    break;
-                }
-            }
+        while(check2 && !NonSpace(line2) ){
+            if(fgets(line2, sizeof(line2), file2) == NULL) check2=0;
         }
         lineCounter++;
     }
+    strcpy(line1," ");
+    strcpy(line2," ");
+    check1=1;
+    check2=1;
     while (lineCounter < lineEnd) {
-        while (fgets(line1, sizeof(line1), file1)!= NULL && is_blank == 1) {
-            is_blank = 1;
-            for (int i = 0; line1[i] != '\0'; i++) {
-                if (line1[i] != ' ' && line1[i] != '\t' && line1[i] != '\n') {
-                    is_blank = 0;
-                    break;
-                }
-            }
+        while(check1 && !NonSpace(line1)){
+            if(fgets(line1, sizeof(line1), file1) == NULL) check1=0;
         }
-        while (fgets(line2, sizeof(line2), file2)!= NULL && is_blank == 1) {
-            is_blank = 1;
-            for (int i = 0; line2[i] != '\0'; i++) {
-                if (line2[i] != ' ' && line2[i] != '\t' && line2[i] != '\n') {
-                    is_blank = 0;
-                    break;
-                }
-            }
+        while(check2 && !NonSpace(line2) ){
+            if(fgets(line2, sizeof(line2), file2) == NULL) check2=0;
         }
+        if(strstr(line1,"\n")==NULL) strcat(line1,"\n");
+        if(strstr(line2,"\n")==NULL) strcat(line2,"\n");
         lineCounter++;
-        char *ptr1 = line1;
-        char *ptr2 = line2;
-        if (strcmp(ptr1, ptr2) != 0) {
-            printf(ANSI_COLOR_RED"%d: %s"ANSI_COLOR_RED, lineCounter, ptr1);
-            printf(ANSI_COLOR_GREEN"%d: %s"ANSI_COLOR_GREEN, lineCounter, ptr2);
+        if (strcmp(line1, line2) != 0) {
+            printf(ANSI_COLOR_RED"%d: %s"ANSI_COLOR_RED, lineCounter, line1);
+            printf(ANSI_COLOR_GREEN"%d: %s"ANSI_COLOR_GREEN, lineCounter, line2);
         }
+        strcpy(line1,"");
+        strcpy(line2,"");
     }
+
     fclose(file1);
     fclose(file2);
 }
 int run_diff(int argc, char *argv[]){
-    char file1[1024],file2[1024];
-    int lineStart , lineEnd;
+    char file1[4097],file2[4097];
+    int lineStart=0 , lineEnd=100000;
     if(strcmp(argv[2],"-c")==0){
+        char lastID[50];
         sprintf(file1,"%s/COMMIT/commit_%s/", tnt_path, argv[3]);
         sprintf(file2,"%s/COMMIT/commit_%s/", tnt_path, argv[4]);
-        diffFiles(file1, file2, 0, 4096);
-
+        printf("%s---%s",file1,file2);
+        FILE *f=fopen(tracks_path,"r");
+        char line[10000] ,f1[4096],f2[4096];
+        while(fgets(line, sizeof(line),f)!=NULL){
+            if(strstr(line,"PATH:")!=NULL){
+                strcpy(f1,file1);
+                strcpy(f2,file2);
+                fgets(line, sizeof(line),f);
+                sscanf(line,"CODE:%s",lastID);
+                strcat(f1,lastID);
+                strcat(f2,lastID);
+                diffFiles(f1, f2, 0, 10000);
+            }
+        }
+        fclose(f);
         return 0;
     }
-    strcpy(file1,argv[3]);
-    strcpy(file2,argv[4]);
-    if(strcmp(argv[5],"line1")==0){
-        sscanf(argv[6], &lineStart);
-        if(strcmp(argv[7],"line2")==0)
-            sscanf(argv[8], &lineEnd);
+    strcpy(file1,argv[2]);
+    strcpy(file2,argv[3]);
+    if(argc>5 && strcmp(argv[4],"-line1")==0){
+        sscanf(argv[5],"%d", &lineStart);
+        if(argc>7 && strcmp(argv[6],"-line2")==0)
+            sscanf(argv[7],"%d", &lineEnd);
     }else{
-        lineStart=0;
-        if(strcmp(argv[5],"line2")==0)
-            sscanf(argv[6], &lineEnd);
-        else
-            lineEnd=1024;
+        if(argc>5 && strcmp(argv[4],"-line2")==0)
+            sscanf(argv[5], "%d",&lineEnd);
     }
     diffFiles(file1, file2, lineStart, lineEnd);
 
@@ -1435,11 +1495,9 @@ int main(int argc, char *argv[]) {
     }else if (strcmp(argv[1], "checkout") == 0) {
         return run_checkout(argc, argv);
     }else if (strcmp(argv[1], "diff") == 0) {
-        return run_diff(argc, argv);
+        run_diff(argc, argv);
     }else{
         return Alias(argc, argv);
-    }/* else if (strcmp(argv[1], "checkout") == 0) {
-        return run_checkout(argc, argv);
-    }*/
+    }
     return 0;
 }
