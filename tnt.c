@@ -25,6 +25,7 @@ char config_path[2048];
 char commits_path[2048];
 char shortcuts_path[2048];
 char branches_path[2048];
+char hooks_path[2048];
 int Last_ID, Current_ID;
 char Branch[256];
 
@@ -85,6 +86,7 @@ int find_tnt(){
     sprintf(tracks_path,"%s/tracks", tnt_path);
     sprintf(config_path,"%s/config", tnt_path);
     sprintf(commits_path,"%s/COMMIT/commits", tnt_path);
+    sprintf(hooks_path,"%s/COMMIT/hooks", tnt_path);
     sprintf(shortcuts_path,"%s/COMMIT/shortcuts", tnt_path);
     sprintf(branches_path,"%s/branches", tnt_path);
     if (chdir(cwd) != 0) return 1;  // return to the initial cwd
@@ -151,6 +153,10 @@ int create_configs(){
     file = fopen("commits", "w");
     fclose(file);
     file = fopen("shortcuts", "w");
+    fclose(file);
+    file = fopen("hooks", "w");
+    fprintf(file,"switch:0 todo-check\nswitch:0 eof-blank-space\nswitch:0 format-check\n"
+                 "switch:0 balance-braces\nswitch:0 static-error-check\nswitch:0 file-size-check\nswitch:0 character-limit\n");
     fclose(file);
     return  0;
 }
@@ -762,6 +768,21 @@ int run_commit(int argc, char * const argv[]){
         fprintf(stdout, "please enter a valid command\n");
         return 1;
     }
+    FILE *fp;
+    char buffer[4096];
+    fp = popen("tnt pre-commit", "r");
+    if (fp == NULL) {
+        perror("Error executing command");
+        return -1;
+    }
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        if (strstr(buffer, ANSI_COLOR_RED) != NULL) {
+            printf("Some hooks FAILED\n");
+            pclose(fp);
+            return 1;
+        }
+    }
+    pclose(fp);
     char name[128], email[128], message[100];
     char line[2048];
     current_name_email(name, email);
@@ -1374,9 +1395,10 @@ void diffFiles(const char *filename1, const char *filename2, int lineStart, int 
     FILE *file1 = fopen(filename1, "r");
     FILE *file2 = fopen(filename2, "r");
     if(file1==NULL || file2==NULL){
-        if(file1==NULL) printf("%s doesn't exist\n",filename1);
-        if(file2==NULL) printf("%s doesn't exist\n",filename2);
-            return;
+        if(file1==NULL && file2==NULL) return;
+        if(file1==NULL) printf("It doesn't exist in first commit\n");
+        if(file2==NULL) printf("It doesn't exist in second commit\n");
+        return;
     }
     char line1[4096], line2[4096];
     int check1=1,check2=1;
@@ -1405,8 +1427,46 @@ void diffFiles(const char *filename1, const char *filename2, int lineStart, int 
         if(strstr(line2,"\n")==NULL) strcat(line2,"\n");
         lineCounter++;
         if (strcmp(line1, line2) != 0) {
-            printf(ANSI_COLOR_RED"%d: %s"ANSI_COLOR_RED, lineCounter, line1);
-            printf(ANSI_COLOR_GREEN"%d: %s"ANSI_COLOR_GREEN, lineCounter, line2);
+            char s1[4096], s2[4096];
+            strcpy(s1,line1);
+            strcpy(s2,line2);
+            char *word1 = strtok(s1, " ");
+            char *word2 = strtok(s2, " ");
+            int difference = 0, i=0 , place;
+            while (word1 != NULL && word2 != NULL) {
+                if (strcmp(word1, word2) != 0){
+                    difference ++;
+                    place=i;
+                }
+                if(difference>1) break;
+                word1 = strtok(NULL, " ");
+                word2 = strtok(NULL, " ");
+                i++;
+            }i=0;
+            if (difference==1){
+                word1 = strtok(line1, " ");
+                printf(ANSI_COLOR_BLUE"%d:",lineCounter);
+                while (word1 != NULL) {
+                    if(i==place)printf(ANSI_COLOR_RED"%s "ANSI_COLOR_RESET, word1);
+                    else printf(ANSI_COLOR_BLUE"%s "ANSI_COLOR_RESET, word1);
+                    word1 = strtok(NULL, " \n");
+                    i++;
+                }
+                i=0;
+                printf(ANSI_COLOR_GREEN"\n%d:",lineCounter);
+                word2 = strtok(line2, " ");
+                while (word2 != NULL) {
+                    if(i==place) printf(ANSI_COLOR_RED"%s "ANSI_COLOR_RESET, word2);
+                    else printf(ANSI_COLOR_GREEN"%s "ANSI_COLOR_RESET, word2);
+                    word2 = strtok(NULL, " \n");
+                    i++;
+                }
+                printf("\n");
+            }else{
+                printf(ANSI_COLOR_BLUE"%d: %s"ANSI_COLOR_RESET, lineCounter, line1);
+                printf(ANSI_COLOR_GREEN"%d: %s"ANSI_COLOR_RESET, lineCounter, line2);
+            }
+
         }
         strcpy(line1,"");
         strcpy(line2,"");
@@ -1419,22 +1479,21 @@ int run_diff(int argc, char *argv[]){
     char file1[4097],file2[4097];
     int lineStart=0 , lineEnd=100000;
     if(strcmp(argv[2],"-c")==0){
-        char lastID[50];
+        char lastID[50],path[2048];
         sprintf(file1,"%s/COMMIT/commit_%s/", tnt_path, argv[3]);
         sprintf(file2,"%s/COMMIT/commit_%s/", tnt_path, argv[4]);
-        printf("%s---%s",file1,file2);
         FILE *f=fopen(tracks_path,"r");
         char line[10000] ,f1[4096],f2[4096];
         while(fgets(line, sizeof(line),f)!=NULL){
-            if(strstr(line,"PATH:")!=NULL){
-                strcpy(f1,file1);
-                strcpy(f2,file2);
-                fgets(line, sizeof(line),f);
-                sscanf(line,"CODE:%s",lastID);
-                strcat(f1,lastID);
-                strcat(f2,lastID);
-                diffFiles(f1, f2, 0, 10000);
-            }
+            sscanf(line,"%s ",path);
+            strcpy(f1,file1);
+            strcpy(f2,file2);
+            sscanf(strstr(line,"CODE:"),"CODE:%s",lastID);
+            if(last_version(atoi(lastID), f1)==last_version(atoi(lastID), f2)) continue;
+            strcat(f1,lastID);
+            strcat(f2,lastID);
+            printf(ANSI_COLOR_MAGENTA "%s\n"ANSI_COLOR_RESET ,path);
+            diffFiles(f1, f2, 0, 10000);
         }
         fclose(f);
         return 0;
@@ -1452,6 +1511,232 @@ int run_diff(int argc, char *argv[]){
     diffFiles(file1, file2, lineStart, lineEnd);
 
     return 0;
+}
+void todo(char *filename, int mode) {
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"todo-check---------------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char *ext = strrchr(filename, '.');
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf(ANSI_COLOR_RED"todo-check----------------Unable to open file\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char line[2048];
+    if ( ext==NULL || strcmp(ext, ".txt") == 0 || strcmp(ext, ".cpp") == 0 || strcmp(ext, ".c") == 0) {
+        while (fgets(line, sizeof(line), file)) {
+            if (strstr(line, "TODO") != NULL) {
+                printf(ANSI_COLOR_RED"todo-check----------------FAILED\n"ANSI_COLOR_RESET);
+                return;
+            }
+        }
+    }
+    fclose(file);
+    printf(ANSI_COLOR_GREEN"todo-check----------------PASSED\n"ANSI_COLOR_RESET);
+}
+void eof_blank_space(char *filename, int mode) {
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"eof-blank-space----------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf(ANSI_COLOR_RED"eof-blank-space----------Unable to open file\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char *ext = strrchr(filename, '.');
+    if (ext!=NULL && strcmp(ext, ".cpp") != 0 && strcmp(ext, ".c") != 0 && strcmp(ext, ".txt") != 0) {
+        fclose(file);
+        printf(ANSI_COLOR_GREEN"eof-blank-space----------PASSED\n"ANSI_COLOR_RESET);
+        return ;
+    }
+    char line[2000];
+    int line_number = 0;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        line_number++;
+        if (feof(file)) {
+            int length = strlen(line);
+            if (length > 0 && (line[length - 1] == ' ' || line[length - 1] == '\t')) {
+                printf(ANSI_COLOR_RED"eof-blank-space----------FAILED\n" ANSI_COLOR_RESET );
+            }
+        }
+    }
+    fclose(file);
+    printf(ANSI_COLOR_GREEN"eof-blank-space-------------PASSED\n"ANSI_COLOR_RESET);
+}
+void format(char *filename, int mode){
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"format-check-------------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf(ANSI_COLOR_RED"format-check------------Unable to open file\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char *ext = strrchr(filename, '.');
+    if (ext!=NULL && strcmp(ext, ".cpp") != 0 && strcmp(ext, ".c") != 0 && strcmp(ext, ".txt") != 0
+        && strcmp(ext, ".mp4") != 0 && strcmp(ext, ".mp3") != 0 && strcmp(ext, ".jpg") != 0 && strcmp(ext, ".wav") != 0) {
+        printf(ANSI_COLOR_RED"format-check--------------PASSED\n"ANSI_COLOR_RESET);
+    }
+    printf(ANSI_COLOR_GREEN"format-check--------------PASSED\n"ANSI_COLOR_RESET);
+}
+void balance_braces(char *filename, int mode) {
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"balance-braces-----------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf(ANSI_COLOR_RED"balance-braces-----------Unable to open file\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char *ext = strrchr(filename, '.');
+    if (ext!=NULL && strcmp(ext, ".cpp") != 0 && strcmp(ext, ".c") != 0 && strcmp(ext, ".txt") != 0) {
+        fclose(file);
+        printf(ANSI_COLOR_GREEN"balance-braces-----------PASSED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    int opened_parentheses = 0;
+    int opened_brackets = 0;
+    int opened_braces = 0;
+    char ch;
+    while ((ch = fgetc(file)) != EOF) {
+        if (ch == '(') {
+            opened_parentheses++;
+        } else if (ch == ')') {
+            if (opened_parentheses == 0) {
+                fclose(file);
+                printf(ANSI_COLOR_RED"balance-braces-----------FAILED\n" ANSI_COLOR_RESET );
+                return;
+            }
+            opened_parentheses--;
+        } else if (ch == '[') {
+            opened_brackets++;
+        } else if (ch == ']') {
+            if (opened_brackets == 0) {
+                fclose(file);
+                printf(ANSI_COLOR_RED"balance-braces-----------FAILED\n" ANSI_COLOR_RESET );
+                return;
+            }
+            opened_brackets--;
+        } else if (ch == '{') {
+            opened_braces++;
+        } else if (ch == '}') {
+            if (opened_braces == 0) {
+                fclose(file);
+                printf(ANSI_COLOR_RED"balance-braces-----------FAILED\n" ANSI_COLOR_RESET );
+                return;
+            }
+            opened_braces--;
+        }
+    }
+    fclose(file);
+    if (opened_parentheses != 0 || opened_brackets != 0 || opened_braces != 0) {
+        printf(ANSI_COLOR_RED"balance-braces-----------FAILED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    printf(ANSI_COLOR_GREEN"balance-braces-----------PASSED\n" ANSI_COLOR_RESET );
+}
+void static_error(char *filename, int mode) {   //check it first
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"static-error-check-------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char command[1000];
+    sprintf(command, "gcc -fsyntax-only %s 2>&1", filename);
+    FILE *output = popen(command, "r");
+    char buffer[1000];
+    while (fgets(buffer, sizeof(buffer), output) != NULL) {
+        if (strstr(buffer, "error:") != NULL) {
+            pclose(output);
+            printf(ANSI_COLOR_RED"static-error-check-------FAILED\n" ANSI_COLOR_RESET );
+        }
+    }
+    pclose(output);
+    printf(ANSI_COLOR_GREEN"static-error-check-------PASSED\n" ANSI_COLOR_RESET );
+}
+void file_size(char *filename, int mode) {
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"file-size-check----------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    FILE *file = fopen(filename, "rb");
+    if (file == NULL) {
+        printf(ANSI_COLOR_RED"file-size-check----------Unable to open file\n" ANSI_COLOR_RESET);
+        return;
+    }
+    fseek(file, 0, SEEK_END);
+    long long size = ftell(file);
+    fclose(file);
+    if (size > 5 * 1024 * 1024) printf(ANSI_COLOR_RED"file-size-check----------FAILED\n" ANSI_COLOR_RESET);
+    else printf(ANSI_COLOR_GREEN"file-size-check----------PASSED\n" ANSI_COLOR_RESET);
+}
+void character_limit(char *filename, int mode) {
+    if(mode==0){
+        printf(ANSI_COLOR_CYAN"character-limit----------SKIPPED\n" ANSI_COLOR_RESET );
+        return;
+    }
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf(ANSI_COLOR_RED"character-limit----------Unable to open file\n" ANSI_COLOR_RESET );
+        return;
+    }
+    char *ext = strrchr(filename, '.');
+    if (ext!=NULL && strcmp(ext, ".cpp") != 0 && strcmp(ext, ".c") != 0 && strcmp(ext, ".txt") != 0) {
+        fclose(file);
+        printf(ANSI_COLOR_GREEN"character-limit----------PASSEDe\n" ANSI_COLOR_RESET );
+        return;
+    }
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fclose(file);
+    if (size > 20000) printf(ANSI_COLOR_RED"character-limit----------FAILED\n" ANSI_COLOR_RESET );
+    else printf(ANSI_COLOR_GREEN"character-limit----------PASSEDe\n" ANSI_COLOR_RESET );
+}
+void run_pre_commit(int argc, char *argv[]){
+    FILE *hooks= fopen(hooks_path,"r+");
+    void (*pointer[7])(char *filename,int mode)={todo,eof_blank_space,format,balance_braces,
+                                                static_error,file_size,character_limit};
+    char line[2048];
+    if(argc == 2){
+        int i=0, on_hooks[7];
+        char path[2048];
+        FILE *history=fopen(history_path,"r");
+        while (fgets(line, sizeof(line), hooks) != NULL){
+            if(strstr(line,"switch:1")!=NULL) on_hooks[i]=1;
+            else on_hooks[i]=0;
+            i++;
+        }
+        while (fgets(line, sizeof(line), history) != NULL){
+            if(strstr(line,"PATH:")!=NULL) sscanf(line,"PATH:%s",path);
+            if(strstr(line,"STAGE:1")!=NULL){
+                printf(ANSI_COLOR_YELLOW"%s\n"ANSI_COLOR_RESET,path);
+                for (int j = 0; j < 7; ++j) {
+                    pointer[j](path, on_hooks[j]);
+                }
+            }
+        }
+        return;
+    }else if(strcmp(argv[2],"hooks")==0){
+        printf("todo-check\neof-blank-space\nformat-check\nbalance-braces\nstatic-error-check\nfile-size-check\ncharacter-limit\n");
+    }else if(strcmp(argv[2],"applied")==0){
+        while (fgets(line, sizeof(line),hooks) != NULL){
+            if(strstr(line,"switch:1")!=NULL) printf("%s", strstr(line," "));
+        }
+    }else if(strcmp(argv[2],"add")==0 || strcmp(argv[2],"remove")==0){
+        while (fgets(line, sizeof(line), hooks) != NULL){
+            if(strstr(line,argv[4])!=NULL) {
+                unsigned long offset = ftell(hooks);
+                fseek(hooks, offset-strlen(line), SEEK_SET);
+                if(strcmp(argv[2],"add")==0)fputs("switch:1",hooks);
+                else fputs("switch:0",hooks);
+                fseek(hooks, offset, SEEK_SET);
+            }
+        }
+    }
+    fclose(hooks);
 }
 int main(int argc, char *argv[]) {
     time_t raw_time;
@@ -1496,6 +1781,8 @@ int main(int argc, char *argv[]) {
         return run_checkout(argc, argv);
     }else if (strcmp(argv[1], "diff") == 0) {
         run_diff(argc, argv);
+    }else if (strcmp(argv[1], "pre-commit") == 0) {
+        run_pre_commit(argc, argv);
     }else{
         return Alias(argc, argv);
     }
